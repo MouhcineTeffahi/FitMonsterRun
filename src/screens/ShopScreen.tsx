@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 
 import { MonsterPreview } from '../components/MonsterPreview';
-import { SKINS, type SkinId } from '../data/skins';
+import { MonsterShowcase } from '../components/game3d/MonsterShowcase';
+import { getSkin, SKINS, type SkinId } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
 import { useProgressStore } from '../store/progressStore';
 import { ui } from '../utils/styles';
@@ -27,12 +28,15 @@ export function ShopScreen({ onBack }: Props) {
   const selectSkin = useProgressStore((s) => s.selectSkin);
 
   const cards = useMemo(() => SKINS, []);
+  const [previewId, setPreviewId] = useState<SkinId>(selectedSkin);
+  const preview = getSkin(previewId);
 
   const onBuy = (id: SkinId, price: number) => {
     if (unlockedSkins.includes(id)) return;
     if (!spendCoins(price)) return;
     unlockSkin(id);
     selectSkin(id);
+    setPreviewId(id);
   };
 
   return (
@@ -48,6 +52,11 @@ export function ShopScreen({ onBack }: Props) {
         </View>
       </View>
 
+      <View style={styles.stage}>
+        <MonsterShowcase skin={preview} style={styles.showcase} />
+        <Text style={styles.stageName}>{preview.name}</Text>
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -58,12 +67,17 @@ export function ShopScreen({ onBack }: Props) {
           const canAfford = totalCoins >= skin.price;
 
           return (
-            <View
+            <Pressable
               key={skin.id}
-              style={[styles.card, selected && styles.cardSelected]}
+              onPress={() => setPreviewId(skin.id)}
+              style={[
+                styles.card,
+                previewId === skin.id && styles.cardPreviewed,
+                selected && styles.cardSelected,
+              ]}
             >
               <View style={styles.previewBox}>
-                <MonsterPreview skin={skin} size={96} />
+                <MonsterPreview skin={skin} size={104} />
               </View>
               <View style={styles.meta}>
                 <Text style={styles.skinName}>{skin.name}</Text>
@@ -106,7 +120,7 @@ export function ShopScreen({ onBack }: Props) {
                   </Pressable>
                 )}
               </View>
-            </View>
+            </Pressable>
           );
         })}
       </ScrollView>
@@ -168,6 +182,29 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     borderWidth: 1,
     borderColor: '#2A2A33',
+  },
+  stage: {
+    marginHorizontal: spacing.md,
+    height: 230,
+    borderRadius: radii.lg,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: '#2A2A33',
+    overflow: 'hidden',
+  },
+  showcase: {
+    ...StyleSheet.absoluteFill,
+  },
+  stageName: {
+    position: 'absolute',
+    left: spacing.md,
+    bottom: spacing.sm,
+    color: colors.yellow,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  cardPreviewed: {
+    borderColor: '#5A5A66',
   },
   cardSelected: {
     borderColor: colors.yellow,

@@ -1,5 +1,27 @@
 export type SkinId = 'classic' | 'street' | 'beast' | 'champion';
 
+/** Colours for each outfit region baked into the Fit Monster model. */
+export type Outfit = {
+  skin: string;
+  head: string;
+  torso: string;
+  arm: string;
+  hand: string;
+  shorts: string;
+  leggings: string;
+  calf: string;
+  shoe: string;
+  sole: string;
+  wrist: string;
+  piping: string;
+  emblem: string;
+  harness: string;
+  eyes: string;
+  roughness: number;
+  metalness: number;
+  cape?: string;
+};
+
 export type SkinDef = {
   id: SkinId;
   name: string;
@@ -7,7 +29,12 @@ export type SkinDef = {
   primary: string;
   secondary: string;
   accent: string;
+  outfit: Outfit;
 };
+
+const YELLOW = '#FFC20E';
+const INK = '#141416';
+const WHITE = '#FFFFFF';
 
 export const SKINS: SkinDef[] = [
   {
@@ -16,7 +43,26 @@ export const SKINS: SkinDef[] = [
     price: 0,
     primary: '#FCB202',
     secondary: '#101014',
-    accent: '#FFD54F',
+    accent: '#FFFFFF',
+    outfit: {
+      skin: YELLOW,
+      head: YELLOW,
+      torso: YELLOW,
+      arm: YELLOW,
+      hand: YELLOW,
+      shorts: INK,
+      leggings: INK,
+      calf: YELLOW,
+      shoe: INK,
+      sole: WHITE,
+      wrist: WHITE,
+      piping: WHITE,
+      emblem: WHITE,
+      harness: WHITE,
+      eyes: WHITE,
+      roughness: 0.42,
+      metalness: 0,
+    },
   },
   {
     id: 'street',
@@ -25,6 +71,25 @@ export const SKINS: SkinDef[] = [
     primary: '#2B2B2B',
     secondary: '#FCB202',
     accent: '#9E9E9E',
+    outfit: {
+      skin: YELLOW,
+      head: YELLOW,
+      torso: '#232329',
+      arm: '#232329',
+      hand: YELLOW,
+      shorts: '#2E2E35',
+      leggings: '#2E2E35',
+      calf: '#2E2E35',
+      shoe: '#F2F2F2',
+      sole: '#FCB202',
+      wrist: '#FCB202',
+      piping: '#FCB202',
+      emblem: '#FCB202',
+      harness: '#34343C',
+      eyes: WHITE,
+      roughness: 0.7,
+      metalness: 0,
+    },
   },
   {
     id: 'beast',
@@ -33,6 +98,25 @@ export const SKINS: SkinDef[] = [
     primary: '#101014',
     secondary: '#FCB202',
     accent: '#FF9800',
+    outfit: {
+      skin: '#1B1B21',
+      head: '#1B1B21',
+      torso: '#1B1B21',
+      arm: '#1B1B21',
+      hand: '#1B1B21',
+      shorts: '#0C0C0E',
+      leggings: '#0C0C0E',
+      calf: '#1B1B21',
+      shoe: '#FCB202',
+      sole: '#0C0C0E',
+      wrist: '#FCB202',
+      piping: '#FCB202',
+      emblem: '#FCB202',
+      harness: '#FCB202',
+      eyes: '#FFB300',
+      roughness: 0.3,
+      metalness: 0.25,
+    },
   },
   {
     id: 'champion',
@@ -41,6 +125,26 @@ export const SKINS: SkinDef[] = [
     primary: '#D4AF37',
     secondary: '#101014',
     accent: '#FFF59D',
+    outfit: {
+      skin: '#F0A630',
+      head: '#F0A630',
+      torso: '#F0A630',
+      arm: '#F0A630',
+      hand: '#F0A630',
+      shorts: '#7A1010',
+      leggings: '#2A0C0C',
+      calf: '#F0A630',
+      shoe: '#FFD54F',
+      sole: WHITE,
+      wrist: '#FFD54F',
+      piping: '#FFD54F',
+      emblem: '#FFF6D5',
+      harness: '#FFD54F',
+      eyes: WHITE,
+      roughness: 0.32,
+      metalness: 0.3,
+      cape: '#C62828',
+    },
   },
 ];
 

@@ -19,6 +19,8 @@ import { getSkin } from '../data/skins';
 import { colors, MAX_ENERGY } from '../data/theme';
 import { useProgressStore } from '../store/progressStore';
 import { clampLane } from '../utils/runner3d';
+import { BASE_SPEED } from '../utils/runSim';
+import { SpeedLines } from '../components/SpeedLines';
 
 type Props = {
   onGameOver: (runCoins: number) => void;
@@ -31,14 +33,15 @@ const INITIAL_STATS: RunStats = {
   energy: MAX_ENERGY,
   proteins: 0,
   multiplier: 1,
+  speed: BASE_SPEED,
 };
 
-const TOASTS: Record<PickupEvent, { text: string; color: string }> = {
-  coin: { text: '+1', color: colors.yellow },
+const TOASTS: Partial<Record<PickupEvent, { text: string; color: string }>> = {
   healthy: { text: 'SAIN ! +ÉNERGIE', color: colors.green },
   protein: { text: 'PROTÉINE ! 💪', color: '#42A5F5' },
   hit: { text: 'MALBOUFFE !', color: colors.red },
   roof: { text: 'SUR LE TRAIN !', color: colors.yellow },
+  platform: { text: 'PLATEFORME !', color: '#00E5FF' },
 };
 
 export function GameScreen({ onGameOver }: Props) {
@@ -54,7 +57,7 @@ export function GameScreen({ onGameOver }: Props) {
   const [toast, setToast] = useState<PickupEvent | null>(null);
   const [ready, setReady] = useState(false);
   const onReady = useCallback(() => setReady(true), []);
-  const controls = useRef<RunControls>({ lane: 1, jumpQueued: false, paused: false });
+  const controls = useRef<RunControls>({ lane: 1, jumpQueued: false, slideQueued: false, paused: false });
   const endedRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,6 +86,12 @@ export function GameScreen({ onGameOver }: Props) {
     c.jumpQueued = true;
   }, []);
 
+  const slide = useCallback(() => {
+    const c = controls.current;
+    if (c.paused || endedRef.current) return;
+    c.slideQueued = true;
+  }, []);
+
   const swipe = useMemo(
     () =>
       Gesture.Pan()
@@ -93,8 +102,9 @@ export function GameScreen({ onGameOver }: Props) {
           const ay = Math.abs(e.translationY);
           if (ax > ay) moveLane(e.translationX > 0 ? 1 : -1);
           else if (e.translationY < 0) jump();
+          else slide();
         }),
-    [jump, moveLane],
+    [jump, moveLane, slide],
   );
 
   const tap = useMemo(() => Gesture.Tap().runOnJS(true).onEnd(jump), [jump]);
@@ -106,11 +116,12 @@ export function GameScreen({ onGameOver }: Props) {
       if (e.key === 'ArrowLeft' || e.key === 'a') moveLane(-1);
       else if (e.key === 'ArrowRight' || e.key === 'd') moveLane(1);
       else if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') jump();
+      else if (e.key === 'ArrowDown' || e.key === 's') slide();
       else if (e.key === 'Escape' || e.key === 'p') setPaused((p) => !p);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [jump, moveLane]);
+  }, [jump, moveLane, slide]);
 
   const onStats = useCallback(
     (next: RunStats) => {
@@ -126,16 +137,16 @@ export function GameScreen({ onGameOver }: Props) {
 
   const onEvent = useCallback(
     (event: PickupEvent) => {
-      if (event === 'coin') return;
-      setToast(event);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToast(null), 1400);
       if (event === 'hit') {
         flash.value = withSequence(
           withTiming(0.45, { duration: 60 }),
           withTiming(0, { duration: 260 }),
         );
       }
+      if (!TOASTS[event]) return;
+      setToast(event);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 1400);
     },
     [flash],
   );
@@ -178,12 +189,13 @@ export function GameScreen({ onGameOver }: Props) {
         </View>
       </GestureDetector>
 
+      <SpeedLines speed={stats.speed} />
       <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
 
-      {toast ? (
+      {toast && TOASTS[toast] ? (
         <View style={styles.toast} pointerEvents="none">
-          <Text style={[styles.toastText, { color: TOASTS[toast].color }]}>
-            {TOASTS[toast].text}
+          <Text style={[styles.toastText, { color: TOASTS[toast]!.color }]}>
+            {TOASTS[toast]!.text}
           </Text>
         </View>
       ) : null}
@@ -201,7 +213,7 @@ export function GameScreen({ onGameOver }: Props) {
 
       <View style={styles.hint} pointerEvents="none">
         <Text style={styles.hintText}>
-          Glisse gauche/droite : voie · Haut ou tape : sauter · Monte sur les trains !
+          Gauche/droite : voie · Haut : sauter · Bas : glisser · Monte sur les trains !
         </Text>
       </View>
 

@@ -11,7 +11,7 @@ import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
 import { useProgressStore } from '../store/progressStore';
 import { ui } from '../utils/styles';
-import { MonsterPreview } from '../components/MonsterPreview';
+import { MonsterShowcase } from '../components/game3d/MonsterShowcase';
 
 type Props = {
   onPlay: () => void;
@@ -31,7 +31,7 @@ export function HomeScreen({ onPlay, onShop }: Props) {
         <Text style={styles.brandRun}>RUN</Text>
 
         <View style={styles.heroCard}>
-          <MonsterPreview skin={skin} size={180} />
+          <MonsterShowcase skin={skin} style={styles.showcase} />
         </View>
 
         <View style={styles.statsRow}>
@@ -83,13 +83,18 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
   },
   heroCard: {
-    alignSelf: 'center',
+    alignSelf: 'stretch',
+    alignItems: 'center',
     backgroundColor: colors.panel,
     borderRadius: radii.lg,
-    padding: spacing.lg,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#2A2A33',
     marginVertical: spacing.sm,
+  },
+  showcase: {
+    width: '100%',
+    height: 300,
   },
   statsRow: {
     flexDirection: 'row',

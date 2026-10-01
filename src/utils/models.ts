@@ -3,7 +3,8 @@ import { Platform } from 'react-native';
 import * as THREE from 'three';
 
 const MODULES = {
-  runner: require('../assets/models/runner.glb'),
+  fitMonster: require('../assets/models/fit-monster.glb'),
+  fitMonsterAnims: require('../assets/models/fit-monster-anims.glb'),
   trainFront: require('../assets/models/train-front.glb'),
   trainMiddle: require('../assets/models/train-middle.glb'),
   trainBack: require('../assets/models/train-back.glb'),
