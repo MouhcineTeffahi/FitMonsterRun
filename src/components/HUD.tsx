@@ -9,6 +9,7 @@ type Props = {
   coins: number;
   distance: number;
   energy: number;
+  proteins?: number;
   multiplier?: number;
   paused: boolean;
   onPause: () => void;
@@ -20,6 +21,7 @@ export function HUD({
   coins,
   distance,
   energy,
+  proteins = 0,
   multiplier = 1,
   paused,
   onPause,
@@ -52,6 +54,12 @@ export function HUD({
               <Text style={styles.coinStar}>★</Text>
             </View>
             <Text style={styles.coinText}>{coins}</Text>
+          </View>
+          <View style={styles.coinRow}>
+            <View style={[styles.coinIcon, styles.proteinIcon]}>
+              <Text style={styles.proteinLetter}>P</Text>
+            </View>
+            <Text style={styles.coinText}>{proteins}</Text>
           </View>
           <Text style={styles.distanceText}>{Math.floor(distance)} m</Text>
         </View>
@@ -151,6 +159,14 @@ const styles = StyleSheet.create({
   },
   coinStar: {
     color: colors.black,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  proteinIcon: {
+    backgroundColor: '#1E88E5',
+  },
+  proteinLetter: {
+    color: colors.white,
     fontSize: 11,
     fontWeight: '900',
   },

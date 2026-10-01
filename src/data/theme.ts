@@ -39,11 +39,4 @@ export const spacing = {
 } as const;
 
 export const MAX_ENERGY = 100;
-export const PLAYER_HITBOX = 44;
-export const ENTITY_HITBOX = 40;
-export const MAX_ENTITIES = 24;
-export const BASE_SCROLL_SPEED = 320;
-export const SPEED_STEP = 50;
 export const SPEED_INTERVAL_MS = 30_000;
-export const SPAWN_INTERVAL_MS = 700;
-export const LANE_COUNT = 3;

@@ -1,38 +1,44 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import {
+import Animated, {
+  useAnimatedStyle,
   useSharedValue,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
-import { Collectible } from '../components/Collectible';
 import { HUD } from '../components/HUD';
-import { Player } from '../components/Player';
-import { Track } from '../components/Track';
-import { getSkin } from '../data/skins';
 import {
-  BASE_SCROLL_SPEED,
-  colors,
-  ENTITY_HITBOX,
-  MAX_ENERGY,
-  PLAYER_HITBOX,
-  SPAWN_INTERVAL_MS,
-  SPEED_INTERVAL_MS,
-  SPEED_STEP,
-} from '../data/theme';
-import type { GameEntity, Lane } from '../data/types';
+  RunnerScene,
+  type PickupEvent,
+  type RunControls,
+  type RunStats,
+} from '../components/game3d/RunnerScene';
+import { getSkin } from '../data/skins';
+import { colors, MAX_ENERGY } from '../data/theme';
 import { useProgressStore } from '../store/progressStore';
-import { aabbOverlap, depthScale, laneToX, shiftLane } from '../utils/lanes';
-import { createEntityPool, recycleEntity, spawnEntity } from '../utils/spawner';
+import { clampLane } from '../utils/runner3d';
 
 type Props = {
   onGameOver: (runCoins: number) => void;
 };
 
-/** Player sits near bottom — Subway Surfers camera. */
-const PLAYER_Y_RATIO = 0.84;
+const INITIAL_STATS: RunStats = {
+  score: 0,
+  coins: 0,
+  distance: 0,
+  energy: MAX_ENERGY,
+  proteins: 0,
+  multiplier: 1,
+};
+
+const TOASTS: Record<PickupEvent, { text: string; color: string }> = {
+  coin: { text: '+1', color: colors.yellow },
+  healthy: { text: 'SAIN ! +ÉNERGIE', color: colors.green },
+  protein: { text: 'PROTÉINE ! 💪', color: '#42A5F5' },
+  hit: { text: 'MALBOUFFE !', color: colors.red },
+};
 
 export function GameScreen({ onGameOver }: Props) {
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
@@ -43,309 +49,174 @@ export function GameScreen({ onGameOver }: Props) {
   const skin = useMemo(() => getSkin(selectedSkin), [selectedSkin]);
 
   const [paused, setPaused] = useState(false);
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const [hud, setHud] = useState({
-    score: 0,
-    coins: 0,
-    distance: 0,
-    energy: MAX_ENERGY,
-    multiplier: 1,
-  });
-  const [entities, setEntities] = useState<GameEntity[]>(() => createEntityPool());
-  const [trackSpeed, setTrackSpeed] = useState(BASE_SCROLL_SPEED);
-
-  const laneRef = useRef<Lane>(1);
-  const poolRef = useRef<GameEntity[]>(entities);
-  const speedRef = useRef(BASE_SCROLL_SPEED);
-  const spawnAccRef = useRef(0);
-  const speedAccRef = useRef(0);
-  const scoreRef = useRef(0);
-  const coinsRef = useRef(0);
-  const distanceRef = useRef(0);
-  const energyRef = useRef(MAX_ENERGY);
-  const multiplierRef = useRef(1);
-  const jumpingRef = useRef(false);
+  const [stats, setStats] = useState<RunStats>(INITIAL_STATS);
+  const [toast, setToast] = useState<PickupEvent | null>(null);
+  const controls = useRef<RunControls>({ lane: 1, jumpQueued: false, paused: false });
   const endedRef = useRef(false);
-  const lastTsRef = useRef<number | null>(null);
-  const hudAccRef = useRef(0);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const playerX = useSharedValue(0);
-  const shakeX = useSharedValue(0);
-  const jumpY = useSharedValue(0);
+  const toastScale = useSharedValue(1);
+  const flash = useSharedValue(0);
 
   useEffect(() => {
     resetRun();
-    poolRef.current = createEntityPool();
-    setEntities(poolRef.current.map((e) => ({ ...e })));
-    laneRef.current = 1;
-    speedRef.current = BASE_SCROLL_SPEED;
-    setTrackSpeed(BASE_SCROLL_SPEED);
-    spawnAccRef.current = 0;
-    speedAccRef.current = 0;
-    scoreRef.current = 0;
-    coinsRef.current = 0;
-    distanceRef.current = 0;
-    energyRef.current = MAX_ENERGY;
-    multiplierRef.current = 1;
-    jumpingRef.current = false;
-    endedRef.current = false;
-    jumpY.value = 0;
-    setHud({
-      score: 0,
-      coins: 0,
-      distance: 0,
-      energy: MAX_ENERGY,
-      multiplier: 1,
-    });
-  }, [jumpY, resetRun]);
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, [resetRun]);
 
   useEffect(() => {
-    if (size.w <= 0) return;
-    playerX.value = withTiming(laneToX(laneRef.current, size.w, 1), {
-      duration: 110,
-    });
-  }, [playerX, size.w]);
+    controls.current.paused = paused;
+  }, [paused]);
 
-  const endGame = useCallback(() => {
-    if (endedRef.current) return;
-    endedRef.current = true;
-    applyRunTick({
-      currentScore: scoreRef.current,
-      currentDistance: distanceRef.current,
-      currentEnergy: energyRef.current,
-    });
-    finishRun();
-    if (coinsRef.current > 0) addCoins(coinsRef.current);
-    onGameOver(coinsRef.current);
-  }, [addCoins, applyRunTick, finishRun, onGameOver]);
+  const moveLane = useCallback((dir: -1 | 1) => {
+    const c = controls.current;
+    if (c.paused || endedRef.current) return;
+    c.lane = clampLane(c.lane + dir);
+  }, []);
 
-  const moveLane = useCallback(
-    (dir: -1 | 1) => {
-      if (paused || endedRef.current || size.w <= 0) return;
-      laneRef.current = shiftLane(laneRef.current, dir);
-      playerX.value = withTiming(laneToX(laneRef.current, size.w, 1), {
-        duration: 100,
-      });
-    },
-    [paused, playerX, size.w],
-  );
-
-  const doJump = useCallback(() => {
-    if (paused || endedRef.current || jumpingRef.current) return;
-    jumpingRef.current = true;
-    jumpY.value = withSequence(
-      withTiming(-78, { duration: 220 }),
-      withTiming(0, { duration: 260 }),
-    );
-    setTimeout(() => {
-      jumpingRef.current = false;
-    }, 480);
-  }, [jumpY, paused]);
+  const jump = useCallback(() => {
+    const c = controls.current;
+    if (c.paused || endedRef.current) return;
+    c.jumpQueued = true;
+  }, []);
 
   const swipe = useMemo(
     () =>
       Gesture.Pan()
-        .maxPointers(1)
+        .runOnJS(true)
+        .minDistance(18)
         .onEnd((e) => {
           const ax = Math.abs(e.translationX);
           const ay = Math.abs(e.translationY);
-          if (ax > ay && ax > 24) {
-            if (e.translationX > 0) moveLane(1);
-            else moveLane(-1);
-          } else if (ay > 28 && e.translationY < 0) {
-            doJump();
-          }
+          if (ax > ay) moveLane(e.translationX > 0 ? 1 : -1);
+          else if (e.translationY < 0) jump();
         }),
-    [doJump, moveLane],
+    [jump, moveLane],
   );
 
-  const onCollectDone = useCallback((id: number) => {
-    const ent = poolRef.current.find((e) => e.id === id);
-    if (!ent) return;
-    recycleEntity(ent);
-  }, []);
+  const tap = useMemo(() => Gesture.Tap().runOnJS(true).onEnd(jump), [jump]);
+  const gesture = useMemo(() => Gesture.Exclusive(swipe, tap), [swipe, tap]);
 
   useEffect(() => {
-    let frame = 0;
-    const tick = (ts: number) => {
-      frame = requestAnimationFrame(tick);
-      if (paused || endedRef.current || size.h <= 0) {
-        lastTsRef.current = ts;
-        return;
-      }
-      const last = lastTsRef.current ?? ts;
-      const dt = Math.min(0.05, (ts - last) / 1000);
-      lastTsRef.current = ts;
-      if (dt <= 0) return;
-
-      spawnAccRef.current += dt * 1000;
-      speedAccRef.current += dt * 1000;
-      hudAccRef.current += dt * 1000;
-
-      if (speedAccRef.current >= SPEED_INTERVAL_MS) {
-        speedAccRef.current = 0;
-        speedRef.current += SPEED_STEP;
-        multiplierRef.current = Math.min(
-          5,
-          1 + Math.floor((speedRef.current - BASE_SCROLL_SPEED) / SPEED_STEP),
-        );
-        setTrackSpeed(speedRef.current);
-      }
-
-      const spawnEvery = Math.max(420, SPAWN_INTERVAL_MS - (multiplierRef.current - 1) * 60);
-      while (spawnAccRef.current >= spawnEvery) {
-        spawnAccRef.current -= spawnEvery;
-        spawnEntity(poolRef.current);
-      }
-
-      const dy = (speedRef.current / size.h) * dt;
-      distanceRef.current += speedRef.current * dt * 0.1;
-      scoreRef.current += speedRef.current * dt * 0.045 * multiplierRef.current;
-
-      const playerY = PLAYER_Y_RATIO * size.h;
-      const px = laneToX(laneRef.current, size.w, 1);
-      const airborne = jumpingRef.current;
-
-      for (const ent of poolRef.current) {
-        if (!ent.active || ent.collected) continue;
-        ent.y += dy;
-        if (ent.y > 1.12) {
-          recycleEntity(ent);
-          continue;
-        }
-
-        const depth = Math.max(0, Math.min(1, ent.y));
-        // Only collide near the player band (Subway hit window).
-        if (depth < 0.72 || depth > 0.95) continue;
-
-        const ey = depth * size.h;
-        const ex = laneToX(ent.lane, size.w, depth);
-        const s = depthScale(depth);
-        const eh = ENTITY_HITBOX * (ent.kind === 'junk' ? 1.35 : 1) * s;
-        const ew = ENTITY_HITBOX * s;
-
-        if (
-          !aabbOverlap(
-            px,
-            playerY,
-            PLAYER_HITBOX,
-            PLAYER_HITBOX * 0.9,
-            ex,
-            ey,
-            ew,
-            eh,
-          )
-        ) {
-          continue;
-        }
-
-        if (ent.kind === 'healthy') {
-          ent.collected = true;
-          ent.active = false;
-          scoreRef.current += 25 * multiplierRef.current;
-          energyRef.current = Math.min(MAX_ENERGY, energyRef.current + 10);
-        } else if (ent.kind === 'coin') {
-          ent.collected = true;
-          ent.active = false;
-          coinsRef.current += 1;
-          scoreRef.current += 10 * multiplierRef.current;
-        } else {
-          // Jump clears low junk obstacles.
-          if (airborne) continue;
-          recycleEntity(ent);
-          energyRef.current = Math.max(0, energyRef.current - 24);
-          shakeX.value = withSequence(
-            withTiming(-12, { duration: 35 }),
-            withTiming(12, { duration: 35 }),
-            withTiming(-7, { duration: 35 }),
-            withTiming(0, { duration: 35 }),
-          );
-          if (energyRef.current <= 0) endGame();
-        }
-      }
-
-      setEntities(poolRef.current.map((e) => ({ ...e })));
-
-      if (hudAccRef.current >= 80) {
-        hudAccRef.current = 0;
-        setHud({
-          score: scoreRef.current,
-          coins: coinsRef.current,
-          distance: distanceRef.current,
-          energy: energyRef.current,
-          multiplier: multiplierRef.current,
-        });
-        applyRunTick({
-          currentScore: scoreRef.current,
-          currentDistance: distanceRef.current,
-          currentEnergy: energyRef.current,
-        });
-      }
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'a') moveLane(-1);
+      else if (e.key === 'ArrowRight' || e.key === 'd') moveLane(1);
+      else if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') jump();
+      else if (e.key === 'Escape' || e.key === 'p') setPaused((p) => !p);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [applyRunTick, endGame, paused, shakeX, size.h, size.w]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [jump, moveLane]);
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setSize({ w: width, h: height });
-  };
+  const onStats = useCallback(
+    (next: RunStats) => {
+      setStats(next);
+      applyRunTick({
+        currentScore: next.score,
+        currentDistance: next.distance,
+        currentEnergy: next.energy,
+      });
+    },
+    [applyRunTick],
+  );
+
+  const onEvent = useCallback(
+    (event: PickupEvent) => {
+      if (event === 'coin') return;
+      setToast(event);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 1000);
+      toastScale.value = 0.6;
+      toastScale.value = withSequence(
+        withTiming(1.2, { duration: 120 }),
+        withTiming(1, { duration: 140 }),
+      );
+      if (event === 'hit') {
+        flash.value = withSequence(
+          withTiming(0.45, { duration: 60 }),
+          withTiming(0, { duration: 260 }),
+        );
+      }
+    },
+    [flash, toastScale],
+  );
+
+  const handleGameOver = useCallback(
+    (final: RunStats) => {
+      if (endedRef.current) return;
+      endedRef.current = true;
+      applyRunTick({
+        currentScore: final.score,
+        currentDistance: final.distance,
+        currentEnergy: 0,
+      });
+      finishRun();
+      if (final.coins > 0) addCoins(final.coins);
+      onGameOver(final.coins);
+    },
+    [addCoins, applyRunTick, finishRun, onGameOver],
+  );
+
+  const quit = useCallback(() => {
+    controls.current.paused = true;
+    handleGameOver(stats);
+  }, [handleGameOver, stats]);
+
+  const toastStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: toastScale.value }],
+  }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
 
   return (
-    <View style={styles.root} onLayout={onLayout}>
-      <Track
-        width={size.w}
-        height={size.h}
-        speed={trackSpeed}
-        paused={paused || endedRef.current}
-      />
-
-      <GestureDetector gesture={swipe}>
-        <View style={styles.playfield}>
-          {entities.map((ent) =>
-            ent.active || ent.collected ? (
-              <Collectible
-                key={ent.id}
-                entity={ent}
-                playfieldWidth={size.w || 1}
-                playfieldHeight={size.h || 1}
-                onCollectDone={onCollectDone}
-              />
-            ) : null,
-          )}
-          {size.w > 0 ? (
-            <Player
-              skin={skin}
-              x={playerX}
-              shakeX={shakeX}
-              jumpY={jumpY}
-              size={92}
-            />
-          ) : null}
+    <View style={styles.root}>
+      <GestureDetector gesture={gesture}>
+        <View style={styles.stage} collapsable={false}>
+          <RunnerScene
+            skin={skin}
+            controls={controls}
+            onStats={onStats}
+            onEvent={onEvent}
+            onGameOver={handleGameOver}
+          />
         </View>
       </GestureDetector>
 
-      <View style={styles.hint} pointerEvents="none">
-        <Text style={styles.hintText}>← → changer de voie · ↑ sauter</Text>
-      </View>
+      <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
+
+      {toast ? (
+        <Animated.View style={[styles.toast, toastStyle]} pointerEvents="none">
+          <Text style={[styles.toastText, { color: TOASTS[toast].color }]}>
+            {TOASTS[toast].text}
+          </Text>
+        </Animated.View>
+      ) : null}
 
       <HUD
-        score={hud.score}
-        coins={hud.coins}
-        distance={hud.distance}
-        energy={hud.energy}
-        multiplier={hud.multiplier}
+        score={stats.score}
+        coins={stats.coins}
+        distance={stats.distance}
+        energy={stats.energy}
+        proteins={stats.proteins}
+        multiplier={stats.multiplier}
         paused={paused}
         onPause={() => setPaused((p) => !p)}
       />
 
-      {paused && !endedRef.current ? (
+      <View style={styles.hint} pointerEvents="none">
+        <Text style={styles.hintText}>
+          Glisse gauche/droite : changer de voie · Glisse en haut ou tape : sauter
+        </Text>
+      </View>
+
+      {paused ? (
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>Pause</Text>
           <Pressable style={styles.pauseBtn} onPress={() => setPaused(false)}>
             <Text style={styles.pauseBtnTextDark}>Reprendre</Text>
           </Pressable>
-          <Pressable style={[styles.pauseBtn, styles.quitBtn]} onPress={endGame}>
+          <Pressable style={[styles.pauseBtn, styles.quitBtn]} onPress={quit}>
             <Text style={styles.pauseBtnText}>Quitter</Text>
           </Pressable>
         </View>
@@ -359,21 +230,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  playfield: {
+  stage: {
     flex: 1,
+  },
+  flash: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.red,
+  },
+  toast: {
+    position: 'absolute',
+    top: '30%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  toastText: {
+    fontSize: 26,
+    fontWeight: '900',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   hint: {
     position: 'absolute',
-    bottom: 10,
+    bottom: 12,
     left: 0,
     right: 0,
     alignItems: 'center',
   },
   hintText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.85)',
     fontSize: 12,
     fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 999,
