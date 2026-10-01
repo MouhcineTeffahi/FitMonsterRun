@@ -38,6 +38,7 @@ const TOASTS: Record<PickupEvent, { text: string; color: string }> = {
   healthy: { text: 'SAIN ! +ÉNERGIE', color: colors.green },
   protein: { text: 'PROTÉINE ! 💪', color: '#42A5F5' },
   hit: { text: 'MALBOUFFE !', color: colors.red },
+  roof: { text: 'SUR LE TRAIN !', color: colors.yellow },
 };
 
 export function GameScreen({ onGameOver }: Props) {
@@ -51,11 +52,12 @@ export function GameScreen({ onGameOver }: Props) {
   const [paused, setPaused] = useState(false);
   const [stats, setStats] = useState<RunStats>(INITIAL_STATS);
   const [toast, setToast] = useState<PickupEvent | null>(null);
+  const [ready, setReady] = useState(false);
+  const onReady = useCallback(() => setReady(true), []);
   const controls = useRef<RunControls>({ lane: 1, jumpQueued: false, paused: false });
   const endedRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toastScale = useSharedValue(1);
   const flash = useSharedValue(0);
 
   useEffect(() => {
@@ -127,12 +129,7 @@ export function GameScreen({ onGameOver }: Props) {
       if (event === 'coin') return;
       setToast(event);
       if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToast(null), 1000);
-      toastScale.value = 0.6;
-      toastScale.value = withSequence(
-        withTiming(1.2, { duration: 120 }),
-        withTiming(1, { duration: 140 }),
-      );
+      toastTimer.current = setTimeout(() => setToast(null), 1400);
       if (event === 'hit') {
         flash.value = withSequence(
           withTiming(0.45, { duration: 60 }),
@@ -140,7 +137,7 @@ export function GameScreen({ onGameOver }: Props) {
         );
       }
     },
-    [flash, toastScale],
+    [flash],
   );
 
   const handleGameOver = useCallback(
@@ -164,9 +161,6 @@ export function GameScreen({ onGameOver }: Props) {
     handleGameOver(stats);
   }, [handleGameOver, stats]);
 
-  const toastStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: toastScale.value }],
-  }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
 
   return (
@@ -179,6 +173,7 @@ export function GameScreen({ onGameOver }: Props) {
             onStats={onStats}
             onEvent={onEvent}
             onGameOver={handleGameOver}
+            onReady={onReady}
           />
         </View>
       </GestureDetector>
@@ -186,11 +181,11 @@ export function GameScreen({ onGameOver }: Props) {
       <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
 
       {toast ? (
-        <Animated.View style={[styles.toast, toastStyle]} pointerEvents="none">
+        <View style={styles.toast} pointerEvents="none">
           <Text style={[styles.toastText, { color: TOASTS[toast].color }]}>
             {TOASTS[toast].text}
           </Text>
-        </Animated.View>
+        </View>
       ) : null}
 
       <HUD
@@ -206,9 +201,15 @@ export function GameScreen({ onGameOver }: Props) {
 
       <View style={styles.hint} pointerEvents="none">
         <Text style={styles.hintText}>
-          Glisse gauche/droite : changer de voie · Glisse en haut ou tape : sauter
+          Glisse gauche/droite : voie · Haut ou tape : sauter · Monte sur les trains !
         </Text>
       </View>
+
+      {!ready ? (
+        <View style={styles.loading} pointerEvents="none">
+          <Text style={styles.loadingText}>Chargement…</Text>
+        </View>
+      ) : null}
 
       {paused ? (
         <View style={styles.pauseOverlay}>
@@ -233,6 +234,17 @@ const styles = StyleSheet.create({
   stage: {
     flex: 1,
   },
+  loading: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: colors.yellow,
+    fontSize: 22,
+    fontWeight: '900',
+  },
   flash: {
     ...StyleSheet.absoluteFill,
     backgroundColor: colors.red,
@@ -245,8 +257,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toastText: {
-    fontSize: 26,
+    fontSize: 30,
     fontWeight: '900',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
     textShadowColor: '#000',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,

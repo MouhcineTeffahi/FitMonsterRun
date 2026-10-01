@@ -1,0 +1,12 @@
+All 3D models in this folder are CC0 (public domain).
+
+Kenney (www.kenney.nl) - Train Kit 1.1, Food Kit 2.0, City Kit Commercial 2.1
+  train-front/middle/back  <- train-electric-subway-a/b/c
+  track                    <- railroad-straight
+  building-a/c/g, skyscraper-a/c
+  burger (burger-cheese), donut (donut-sprinkles), fries, soda,
+  broccoli, chicken (meat-cooked), apple, protein (carton)
+  Textures were embedded into each .glb with gltf-transform.
+
+runner.glb <- RobotExpressive by Tomas Laulhe (Quaternius-based), CC0,
+  from the three.js examples repository.
