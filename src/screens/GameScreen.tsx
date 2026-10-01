@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle,
+import {
   useSharedValue,
   withSequence,
   withTiming,
@@ -11,6 +10,7 @@ import Animated, {
 import { Collectible } from '../components/Collectible';
 import { HUD } from '../components/HUD';
 import { Player } from '../components/Player';
+import { Track } from '../components/Track';
 import { getSkin } from '../data/skins';
 import {
   BASE_SCROLL_SPEED,
@@ -24,14 +24,15 @@ import {
 } from '../data/theme';
 import type { GameEntity, Lane } from '../data/types';
 import { useProgressStore } from '../store/progressStore';
-import { aabbOverlap, laneToX, shiftLane } from '../utils/lanes';
+import { aabbOverlap, depthScale, laneToX, shiftLane } from '../utils/lanes';
 import { createEntityPool, recycleEntity, spawnEntity } from '../utils/spawner';
 
 type Props = {
   onGameOver: (runCoins: number) => void;
 };
 
-const PLAYER_Y_RATIO = 0.82;
+/** Player sits near bottom — Subway Surfers camera. */
+const PLAYER_Y_RATIO = 0.84;
 
 export function GameScreen({ onGameOver }: Props) {
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
@@ -48,47 +49,60 @@ export function GameScreen({ onGameOver }: Props) {
     coins: 0,
     distance: 0,
     energy: MAX_ENERGY,
+    multiplier: 1,
   });
   const [entities, setEntities] = useState<GameEntity[]>(() => createEntityPool());
+  const [trackSpeed, setTrackSpeed] = useState(BASE_SCROLL_SPEED);
 
   const laneRef = useRef<Lane>(1);
   const poolRef = useRef<GameEntity[]>(entities);
   const speedRef = useRef(BASE_SCROLL_SPEED);
-  const runMsRef = useRef(0);
   const spawnAccRef = useRef(0);
   const speedAccRef = useRef(0);
   const scoreRef = useRef(0);
   const coinsRef = useRef(0);
   const distanceRef = useRef(0);
   const energyRef = useRef(MAX_ENERGY);
+  const multiplierRef = useRef(1);
+  const jumpingRef = useRef(false);
   const endedRef = useRef(false);
   const lastTsRef = useRef<number | null>(null);
   const hudAccRef = useRef(0);
 
   const playerX = useSharedValue(0);
   const shakeX = useSharedValue(0);
+  const jumpY = useSharedValue(0);
 
   useEffect(() => {
     resetRun();
     poolRef.current = createEntityPool();
-    setEntities([...poolRef.current]);
+    setEntities(poolRef.current.map((e) => ({ ...e })));
     laneRef.current = 1;
     speedRef.current = BASE_SCROLL_SPEED;
-    runMsRef.current = 0;
+    setTrackSpeed(BASE_SCROLL_SPEED);
     spawnAccRef.current = 0;
     speedAccRef.current = 0;
     scoreRef.current = 0;
     coinsRef.current = 0;
     distanceRef.current = 0;
     energyRef.current = MAX_ENERGY;
+    multiplierRef.current = 1;
+    jumpingRef.current = false;
     endedRef.current = false;
-    setHud({ score: 0, coins: 0, distance: 0, energy: MAX_ENERGY });
-  }, [resetRun]);
+    jumpY.value = 0;
+    setHud({
+      score: 0,
+      coins: 0,
+      distance: 0,
+      energy: MAX_ENERGY,
+      multiplier: 1,
+    });
+  }, [jumpY, resetRun]);
 
   useEffect(() => {
     if (size.w <= 0) return;
-    playerX.value = withTiming(laneToX(laneRef.current, size.w), {
-      duration: 140,
+    playerX.value = withTiming(laneToX(laneRef.current, size.w, 1), {
+      duration: 110,
     });
   }, [playerX, size.w]);
 
@@ -109,33 +123,46 @@ export function GameScreen({ onGameOver }: Props) {
     (dir: -1 | 1) => {
       if (paused || endedRef.current || size.w <= 0) return;
       laneRef.current = shiftLane(laneRef.current, dir);
-      playerX.value = withTiming(laneToX(laneRef.current, size.w), {
-        duration: 120,
+      playerX.value = withTiming(laneToX(laneRef.current, size.w, 1), {
+        duration: 100,
       });
     },
     [paused, playerX, size.w],
   );
 
+  const doJump = useCallback(() => {
+    if (paused || endedRef.current || jumpingRef.current) return;
+    jumpingRef.current = true;
+    jumpY.value = withSequence(
+      withTiming(-78, { duration: 220 }),
+      withTiming(0, { duration: 260 }),
+    );
+    setTimeout(() => {
+      jumpingRef.current = false;
+    }, 480);
+  }, [jumpY, paused]);
+
   const swipe = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-24, 24])
-        .failOffsetY([-40, 40])
+        .maxPointers(1)
         .onEnd((e) => {
-          if (e.translationX > 28) {
-            moveLane(1);
-          } else if (e.translationX < -28) {
-            moveLane(-1);
+          const ax = Math.abs(e.translationX);
+          const ay = Math.abs(e.translationY);
+          if (ax > ay && ax > 24) {
+            if (e.translationX > 0) moveLane(1);
+            else moveLane(-1);
+          } else if (ay > 28 && e.translationY < 0) {
+            doJump();
           }
         }),
-    [moveLane],
+    [doJump, moveLane],
   );
 
   const onCollectDone = useCallback((id: number) => {
     const ent = poolRef.current.find((e) => e.id === id);
     if (!ent) return;
     recycleEntity(ent);
-    setEntities([...poolRef.current]);
   }, []);
 
   useEffect(() => {
@@ -151,7 +178,6 @@ export function GameScreen({ onGameOver }: Props) {
       lastTsRef.current = ts;
       if (dt <= 0) return;
 
-      runMsRef.current += dt * 1000;
       spawnAccRef.current += dt * 1000;
       speedAccRef.current += dt * 1000;
       hudAccRef.current += dt * 1000;
@@ -159,82 +185,95 @@ export function GameScreen({ onGameOver }: Props) {
       if (speedAccRef.current >= SPEED_INTERVAL_MS) {
         speedAccRef.current = 0;
         speedRef.current += SPEED_STEP;
+        multiplierRef.current = Math.min(
+          5,
+          1 + Math.floor((speedRef.current - BASE_SCROLL_SPEED) / SPEED_STEP),
+        );
+        setTrackSpeed(speedRef.current);
       }
 
-      while (spawnAccRef.current >= SPAWN_INTERVAL_MS) {
-        spawnAccRef.current -= SPAWN_INTERVAL_MS;
+      const spawnEvery = Math.max(420, SPAWN_INTERVAL_MS - (multiplierRef.current - 1) * 60);
+      while (spawnAccRef.current >= spawnEvery) {
+        spawnAccRef.current -= spawnEvery;
         spawnEntity(poolRef.current);
       }
 
       const dy = (speedRef.current / size.h) * dt;
-      distanceRef.current += speedRef.current * dt * 0.08;
+      distanceRef.current += speedRef.current * dt * 0.1;
+      scoreRef.current += speedRef.current * dt * 0.045 * multiplierRef.current;
 
       const playerY = PLAYER_Y_RATIO * size.h;
-      const px = laneToX(laneRef.current, size.w);
+      const px = laneToX(laneRef.current, size.w, 1);
+      const airborne = jumpingRef.current;
 
-      let dirty = false;
       for (const ent of poolRef.current) {
         if (!ent.active || ent.collected) continue;
         ent.y += dy;
-        if (ent.y > 1.15) {
+        if (ent.y > 1.12) {
           recycleEntity(ent);
-          dirty = true;
           continue;
         }
 
-        const ey = ent.y * size.h;
-        const ex = laneToX(ent.lane, size.w);
+        const depth = Math.max(0, Math.min(1, ent.y));
+        // Only collide near the player band (Subway hit window).
+        if (depth < 0.72 || depth > 0.95) continue;
+
+        const ey = depth * size.h;
+        const ex = laneToX(ent.lane, size.w, depth);
+        const s = depthScale(depth);
+        const eh = ENTITY_HITBOX * (ent.kind === 'junk' ? 1.35 : 1) * s;
+        const ew = ENTITY_HITBOX * s;
+
         if (
-          aabbOverlap(
+          !aabbOverlap(
             px,
             playerY,
             PLAYER_HITBOX,
-            PLAYER_HITBOX,
+            PLAYER_HITBOX * 0.9,
             ex,
             ey,
-            ENTITY_HITBOX,
-            ENTITY_HITBOX,
+            ew,
+            eh,
           )
         ) {
-          if (ent.kind === 'healthy') {
-            ent.collected = true;
-            ent.active = false;
-            scoreRef.current += 25;
-            energyRef.current = Math.min(MAX_ENERGY, energyRef.current + 8);
-            dirty = true;
-          } else if (ent.kind === 'coin') {
-            ent.collected = true;
-            ent.active = false;
-            coinsRef.current += 1;
-            scoreRef.current += 10;
-            dirty = true;
-          } else {
-            recycleEntity(ent);
-            dirty = true;
-            energyRef.current = Math.max(0, energyRef.current - 22);
-            shakeX.value = withSequence(
-              withTiming(-10, { duration: 40 }),
-              withTiming(10, { duration: 40 }),
-              withTiming(-6, { duration: 40 }),
-              withTiming(0, { duration: 40 }),
-            );
-            if (energyRef.current <= 0) {
-              endGame();
-            }
-          }
+          continue;
+        }
+
+        if (ent.kind === 'healthy') {
+          ent.collected = true;
+          ent.active = false;
+          scoreRef.current += 25 * multiplierRef.current;
+          energyRef.current = Math.min(MAX_ENERGY, energyRef.current + 10);
+        } else if (ent.kind === 'coin') {
+          ent.collected = true;
+          ent.active = false;
+          coinsRef.current += 1;
+          scoreRef.current += 10 * multiplierRef.current;
+        } else {
+          // Jump clears low junk obstacles.
+          if (airborne) continue;
+          recycleEntity(ent);
+          energyRef.current = Math.max(0, energyRef.current - 24);
+          shakeX.value = withSequence(
+            withTiming(-12, { duration: 35 }),
+            withTiming(12, { duration: 35 }),
+            withTiming(-7, { duration: 35 }),
+            withTiming(0, { duration: 35 }),
+          );
+          if (energyRef.current <= 0) endGame();
         }
       }
 
-      // Publish pooled positions each frame (capped entity count keeps this cheap).
       setEntities(poolRef.current.map((e) => ({ ...e })));
 
-      if (hudAccRef.current >= 100) {
+      if (hudAccRef.current >= 80) {
         hudAccRef.current = 0;
         setHud({
           score: scoreRef.current,
           coins: coinsRef.current,
           distance: distanceRef.current,
           energy: energyRef.current,
+          multiplier: multiplierRef.current,
         });
         applyRunTick({
           currentScore: scoreRef.current,
@@ -252,15 +291,14 @@ export function GameScreen({ onGameOver }: Props) {
     setSize({ w: width, h: height });
   };
 
-  const roadStyle = useAnimatedStyle(() => ({ opacity: 1 }));
-
   return (
     <View style={styles.root} onLayout={onLayout}>
-      <View style={styles.sky} />
-      <Animated.View style={[styles.road, roadStyle]}>
-        <View style={[styles.laneLine, { left: '33%' }]} />
-        <View style={[styles.laneLine, { left: '66%' }]} />
-      </Animated.View>
+      <Track
+        width={size.w}
+        height={size.h}
+        speed={trackSpeed}
+        paused={paused || endedRef.current}
+      />
 
       <GestureDetector gesture={swipe}>
         <View style={styles.playfield}>
@@ -276,16 +314,27 @@ export function GameScreen({ onGameOver }: Props) {
             ) : null,
           )}
           {size.w > 0 ? (
-            <Player skin={skin} x={playerX} shakeX={shakeX} size={74} />
+            <Player
+              skin={skin}
+              x={playerX}
+              shakeX={shakeX}
+              jumpY={jumpY}
+              size={92}
+            />
           ) : null}
         </View>
       </GestureDetector>
+
+      <View style={styles.hint} pointerEvents="none">
+        <Text style={styles.hintText}>← → changer de voie · ↑ sauter</Text>
+      </View>
 
       <HUD
         score={hud.score}
         coins={hud.coins}
         distance={hud.distance}
         energy={hud.energy}
+        multiplier={hud.multiplier}
         paused={paused}
         onPause={() => setPaused((p) => !p)}
       />
@@ -294,12 +343,9 @@ export function GameScreen({ onGameOver }: Props) {
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>Pause</Text>
           <Pressable style={styles.pauseBtn} onPress={() => setPaused(false)}>
-            <Text style={styles.pauseBtnText}>Reprendre</Text>
+            <Text style={styles.pauseBtnTextDark}>Reprendre</Text>
           </Pressable>
-          <Pressable
-            style={[styles.pauseBtn, styles.quitBtn]}
-            onPress={endGame}
-          >
+          <Pressable style={[styles.pauseBtn, styles.quitBtn]} onPress={endGame}>
             <Text style={styles.pauseBtnText}>Quitter</Text>
           </Pressable>
         </View>
@@ -313,31 +359,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  sky: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.skyTop,
-  },
-  road: {
-    position: 'absolute',
-    left: '8%',
-    right: '8%',
-    top: '12%',
-    bottom: 0,
-    backgroundColor: colors.road,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  laneLine: {
-    position: 'absolute',
-    top: 12,
-    bottom: 12,
-    width: 3,
-    marginLeft: -1.5,
-    backgroundColor: colors.laneLine,
-    opacity: 0.55,
-  },
   playfield: {
     flex: 1,
+  },
+  hint: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  hintText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFill,
@@ -368,6 +408,11 @@ const styles = StyleSheet.create({
   },
   pauseBtnText: {
     color: colors.white,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  pauseBtnTextDark: {
+    color: colors.black,
     fontWeight: '900',
     fontSize: 16,
   },

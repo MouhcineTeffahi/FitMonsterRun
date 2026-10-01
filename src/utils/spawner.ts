@@ -14,13 +14,6 @@ function pickVariant(kind: EntityKind): EntityVariant {
   return JUNK[Math.floor(Math.random() * JUNK.length)];
 }
 
-function randomKind(): EntityKind {
-  const roll = Math.random();
-  if (roll < 0.38) return 'healthy';
-  if (roll < 0.62) return 'coin';
-  return 'junk';
-}
-
 function randomLane(): Lane {
   return Math.floor(Math.random() * 3) as Lane;
 }
@@ -37,17 +30,48 @@ export function createEntityPool(size = MAX_ENTITIES): GameEntity[] {
   }));
 }
 
-/** Activate an inactive pooled entity near the top. Returns false if pool full. */
-export function spawnEntity(pool: GameEntity[]): boolean {
-  const slot = pool.find((e) => !e.active);
-  if (!slot) return false;
-  const kind = randomKind();
+function activate(
+  slot: GameEntity,
+  kind: EntityKind,
+  lane: Lane,
+  y: number,
+): void {
   slot.kind = kind;
   slot.variant = pickVariant(kind);
-  slot.lane = randomLane();
-  slot.y = -0.08 - Math.random() * 0.12;
+  slot.lane = lane;
+  slot.y = y;
   slot.active = true;
   slot.collected = false;
+}
+
+/** Spawn pattern: coin trail, single pickup, or junk obstacle (Subway-style). */
+export function spawnEntity(pool: GameEntity[]): boolean {
+  const free = pool.filter((e) => !e.active);
+  if (free.length === 0) return false;
+
+  const roll = Math.random();
+  const lane = randomLane();
+
+  // Coin trail down one lane (like Subway Surfers).
+  if (roll < 0.42 && free.length >= 3) {
+    const count = Math.min(4, free.length);
+    for (let i = 0; i < count; i++) {
+      activate(free[i], 'coin', lane, -0.08 - i * 0.09);
+    }
+    return true;
+  }
+
+  if (roll < 0.68) {
+    activate(free[0], 'healthy', lane, -0.1 - Math.random() * 0.08);
+    return true;
+  }
+
+  activate(free[0], 'junk', lane, -0.1 - Math.random() * 0.08);
+  // Occasionally block a second lane with junk (forces a dodge).
+  if (free.length > 1 && Math.random() < 0.35) {
+    const other = ((lane + 1 + Math.floor(Math.random() * 2)) % 3) as Lane;
+    activate(free[1], 'junk', other, -0.18);
+  }
   return true;
 }
 

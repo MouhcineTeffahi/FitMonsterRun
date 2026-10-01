@@ -9,15 +9,18 @@ type Props = {
   coins: number;
   distance: number;
   energy: number;
+  multiplier?: number;
   paused: boolean;
   onPause: () => void;
 };
 
+/** Subway Surfers–style HUD: pause TL, score/multiplier/coins TR, energy bar. */
 export function HUD({
   score,
   coins,
   distance,
   energy,
+  multiplier = 1,
   paused,
   onPause,
 }: Props) {
@@ -32,22 +35,25 @@ export function HUD({
           accessibilityRole="button"
           accessibilityLabel={paused ? 'Reprendre' : 'Pause'}
         >
-          <Text style={styles.pauseText}>{paused ? '▶' : 'Ⅱ'}</Text>
+          <Text style={styles.pauseText}>{paused ? '▶' : '❚❚'}</Text>
         </Pressable>
 
-        <View style={styles.statPill}>
-          <Text style={styles.statLabel}>SCORE</Text>
-          <Text style={styles.statValue}>{Math.floor(score)}</Text>
-        </View>
-
         <View style={styles.rightCol}>
-          <View style={styles.statPill}>
-            <Text style={styles.coinDot}>●</Text>
-            <Text style={styles.statValue}>{coins}</Text>
+          <View style={styles.scoreRow}>
+            <View style={styles.multiplier}>
+              <Text style={styles.multiplierText}>x{multiplier}</Text>
+            </View>
+            <Text style={styles.scoreText}>
+              {String(Math.floor(score)).padStart(5, '0')}
+            </Text>
           </View>
-          <View style={[styles.statPill, styles.distancePill]}>
-            <Text style={styles.statValue}>{Math.floor(distance)} m</Text>
+          <View style={styles.coinRow}>
+            <View style={styles.coinIcon}>
+              <Text style={styles.coinStar}>★</Text>
+            </View>
+            <Text style={styles.coinText}>{coins}</Text>
           </View>
+          <Text style={styles.distanceText}>{Math.floor(distance)} m</Text>
         </View>
       </View>
 
@@ -59,8 +65,7 @@ export function HUD({
               styles.energyFill,
               {
                 height: `${energyPct * 100}%`,
-                backgroundColor:
-                  energyPct > 0.35 ? colors.green : colors.red,
+                backgroundColor: energyPct > 0.35 ? colors.green : colors.red,
               },
             ]}
           />
@@ -73,66 +78,96 @@ export function HUD({
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFill,
-    paddingTop: 18,
+    paddingTop: 16,
     paddingHorizontal: 14,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 10,
   },
   pauseBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.sm,
-    backgroundColor: colors.black,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#33333D',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   pauseText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  rightCol: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  statPill: {
-    backgroundColor: colors.black,
-    borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#2A2A33',
-  },
-  distancePill: {
-    backgroundColor: colors.panel,
-  },
-  statLabel: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  statValue: {
     color: colors.white,
     fontSize: 14,
     fontWeight: '900',
   },
-  coinDot: {
-    color: colors.yellow,
+  rightCol: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  multiplier: {
+    backgroundColor: colors.yellow,
+    borderRadius: radii.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minWidth: 36,
+    alignItems: 'center',
+  },
+  multiplierText: {
+    color: colors.black,
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  scoreText: {
+    color: colors.white,
+    fontSize: 26,
+    fontWeight: '900',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    letterSpacing: 1,
+  },
+  coinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  coinIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coinStar: {
+    color: colors.black,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  coinText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  distanceText: {
+    color: 'rgba(255,255,255,0.85)',
     fontSize: 12,
+    fontWeight: '800',
   },
   energyWrap: {
     position: 'absolute',
     start: 14,
-    bottom: 120,
+    bottom: 110,
     alignItems: 'center',
     gap: 6,
   },
@@ -141,15 +176,17 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.5,
+    textShadowColor: '#000',
+    textShadowRadius: 3,
   },
   energyTrack: {
     width: 14,
     height: 120,
     borderRadius: 8,
-    backgroundColor: colors.black,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#33333D',
+    borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'flex-end',
   },
   energyFill: {
