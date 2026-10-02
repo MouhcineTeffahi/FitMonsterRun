@@ -17,3 +17,6 @@ fit-monster-anims.glb <- Quaternius "Universal Animation Library" (CC0):
 Everything else in the world (trucks, road, buildings, palms, street props,
 water bottle, coins) is procedural geometry built in src/game/. Sound effects
 in src/assets/sounds are synthesised by scripts/make-sfx.mjs (original).
+
+src/assets/fonts/LilitaOne-Regular.ttf <- Lilita One by Juan Montoreano
+  (Google Fonts), SIL Open Font License 1.1, see src/assets/fonts/OFL.txt.
