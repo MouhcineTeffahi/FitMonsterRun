@@ -7,6 +7,7 @@ import {
   type SkinId,
 } from '../data/skins';
 import { MAX_ENERGY } from '../data/theme';
+import { DAILY_CHALLENGES, todayKey, type ChallengeStat } from '../data/challenges';
 
 const STORAGE_KEY = '@fit_monster_run/progress_v1';
 
@@ -16,7 +17,28 @@ type PersistedSlice = {
   unlockedSkins: SkinId[];
   bestScore: number;
   soundEnabled: boolean;
+  /** DÉFIS progress; reset when the local date changes. */
+  daily: DailyState;
+  /** Personal best runs, highest first (CLASSEMENT). */
+  topScores: number[];
 };
+
+export type DailyState = {
+  date: string;
+  progress: Partial<Record<ChallengeStat, number>>;
+  claimed: string[];
+};
+
+/** End-of-run counters credited to the daily challenges. */
+export type RunRecord = Record<ChallengeStat, number> & { score: number };
+
+function freshDaily(): DailyState {
+  return { date: todayKey(), progress: {}, claimed: [] };
+}
+
+function currentDaily(daily: DailyState): DailyState {
+  return daily.date === todayKey() ? daily : freshDaily();
+}
 
 type RunSlice = {
   currentEnergy: number;
@@ -39,6 +61,8 @@ type ProgressState = PersistedSlice &
     toggleSound: () => void;
     applyRunTick: (patch: Partial<Pick<RunSlice, 'currentScore' | 'currentDistance' | 'currentEnergy'>>) => void;
     finishRun: () => void;
+    recordRun: (run: RunRecord) => void;
+    claimChallenge: (id: string) => boolean;
   };
 
 function isSkinId(value: unknown): value is SkinId {
@@ -57,7 +81,23 @@ function persistedPayload(state: PersistedSlice): PersistedSlice {
     unlockedSkins: state.unlockedSkins,
     bestScore: state.bestScore,
     soundEnabled: state.soundEnabled,
+    daily: state.daily,
+    topScores: state.topScores,
   };
+}
+
+function parseDaily(raw: unknown): DailyState {
+  if (!raw || typeof raw !== 'object') return freshDaily();
+  const d = raw as Partial<DailyState>;
+  if (typeof d.date !== 'string') return freshDaily();
+  const progress: DailyState['progress'] = {};
+  if (d.progress && typeof d.progress === 'object') {
+    for (const [k, v] of Object.entries(d.progress)) {
+      if (Number.isFinite(Number(v))) progress[k as ChallengeStat] = Number(v);
+    }
+  }
+  const claimed = Array.isArray(d.claimed) ? d.claimed.filter((c) => typeof c === 'string') : [];
+  return currentDaily({ date: d.date, progress, claimed });
 }
 
 export const useProgressStore = create<ProgressState>((set, get) => ({
@@ -67,6 +107,8 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   bestScore: 0,
   lastScore: 0,
   soundEnabled: true,
+  daily: freshDaily(),
+  topScores: [],
   currentEnergy: MAX_ENERGY,
   currentScore: 0,
   currentDistance: 0,
@@ -149,6 +191,10 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
           : [DEFAULT_SKIN, ...unlocked],
         bestScore: Math.max(0, Math.floor(Number(parsed.bestScore) || 0)),
         soundEnabled: parsed.soundEnabled !== false,
+        daily: parseDaily(parsed.daily),
+        topScores: Array.isArray(parsed.topScores)
+          ? parsed.topScores.map(Number).filter(Number.isFinite).slice(0, 5)
+          : [],
         hydrated: true,
       });
     } catch {
@@ -186,5 +232,32 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
       set({ bestScore: lastScore });
       void get().saveProgress();
     }
+  },
+
+  recordRun: (run) => {
+    const daily = currentDaily(get().daily);
+    const progress = { ...daily.progress };
+    for (const c of DAILY_CHALLENGES) {
+      progress[c.stat] = (progress[c.stat] ?? 0) + Math.floor(run[c.stat]);
+    }
+    const score = Math.floor(run.score);
+    const topScores = score > 0
+      ? [...get().topScores, score].sort((a, b) => b - a).slice(0, 5)
+      : get().topScores;
+    set({ daily: { ...daily, progress }, topScores });
+    void get().saveProgress();
+  },
+
+  claimChallenge: (id) => {
+    const daily = currentDaily(get().daily);
+    const def = DAILY_CHALLENGES.find((c) => c.id === id);
+    if (!def || daily.claimed.includes(id)) return false;
+    if ((daily.progress[def.stat] ?? 0) < def.target) return false;
+    set((s) => ({
+      daily: { ...daily, claimed: [...daily.claimed, id] },
+      totalCoins: s.totalCoins + def.reward,
+    }));
+    void get().saveProgress();
+    return true;
   },
 }));

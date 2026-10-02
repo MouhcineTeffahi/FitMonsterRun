@@ -1,9 +1,6 @@
 All 3D models in this folder are CC0 (public domain).
 
-Kenney (www.kenney.nl) - Train Kit 1.1, Food Kit 2.0, City Kit Commercial 2.1
-  train-front/middle/back  <- train-electric-subway-a/b/c
-  track                    <- railroad-straight
-  building-a/c/g, skyscraper-a/c
+Kenney (www.kenney.nl) - Food Kit 2.0
   burger (burger-cheese), donut (donut-sprinkles), fries, soda,
   broccoli, chicken (meat-cooked), apple, protein (carton)
   Textures were embedded into each .glb with gltf-transform.
@@ -11,7 +8,12 @@ Kenney (www.kenney.nl) - Train Kit 1.1, Food Kit 2.0, City Kit Commercial 2.1
 fit-monster.glb <- Quaternius "Universal Base Characters" Superhero Male (CC0),
   restyled by scripts/build-character.mjs into the Fit Monster: smoothed mask
   face, almond eyes, "N" chest harness, wristbands, shorts with piping,
-  leggings and sneakers baked as geometry with per-region ids.
+  knee leggings, yellow socks and sneakers baked as geometry with per-region ids.
 fit-monster-anims.glb <- Quaternius "Universal Animation Library" (CC0):
-  Sprint_Loop, Jump_*, Idle_Loop, Dance_Loop, Roll, Crouch_Fwd_Loop.
+  Sprint_Loop, Jump_*, Idle_Loop, Dance_Loop, Roll, Crouch_Fwd_Loop,
+  Death01, Hit_Chest.
   Both mirrored at codeberg.org/jamesonBradfield/Quaternius_IK_Rigged_with_animations.
+
+Everything else in the world (trucks, road, buildings, palms, street props,
+water bottle, coins) is procedural geometry built in src/game/. Sound effects
+in src/assets/sounds are synthesised by scripts/make-sfx.mjs (original).

@@ -3,15 +3,15 @@
  * Import from here for all screens/components.
  */
 export const colors = {
-  background: '#101014',
+  background: '#0D1426',
   yellow: '#FCB202',
   yellowBright: '#FFD54F',
   black: '#000000',
   white: '#FFFFFF',
   green: '#4CAF50',
   red: '#EF4444',
-  panel: '#16161C',
-  panelElevated: '#1C1C24',
+  panel: '#141D33',
+  panelElevated: '#1D2844',
   muted: '#9A9A9A',
   road: '#2A2A32',
   laneLine: '#E8E8E8',
@@ -21,6 +21,10 @@ export const colors = {
   healthy: '#4CAF50',
   junk: '#EF4444',
   shadow: '#000000',
+  navy: '#0A1020',
+  border: '#2B3A5E',
+  protein: '#42A5F5',
+  power: '#FFE34D',
 } as const;
 
 export const radii = {

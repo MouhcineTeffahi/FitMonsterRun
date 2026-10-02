@@ -17,6 +17,7 @@ export type Outfit = {
   emblem: string;
   harness: string;
   eyes: string;
+  sock: string;
   roughness: number;
   metalness: number;
   cape?: string;
@@ -60,6 +61,7 @@ export const SKINS: SkinDef[] = [
       emblem: WHITE,
       harness: WHITE,
       eyes: WHITE,
+      sock: '#FFD84A',
       roughness: 0.42,
       metalness: 0,
     },
@@ -87,6 +89,7 @@ export const SKINS: SkinDef[] = [
       emblem: '#FCB202',
       harness: '#34343C',
       eyes: WHITE,
+      sock: '#F2F2F2',
       roughness: 0.7,
       metalness: 0,
     },
@@ -114,6 +117,7 @@ export const SKINS: SkinDef[] = [
       emblem: '#FCB202',
       harness: '#FCB202',
       eyes: '#FFB300',
+      sock: '#FCB202',
       roughness: 0.3,
       metalness: 0.25,
     },
@@ -141,6 +145,7 @@ export const SKINS: SkinDef[] = [
       emblem: '#FFF6D5',
       harness: '#FFD54F',
       eyes: WHITE,
+      sock: WHITE,
       roughness: 0.32,
       metalness: 0.3,
       cape: '#C62828',

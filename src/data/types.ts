@@ -1,1 +1,1 @@
-export type ScreenId = 'home' | 'game' | 'gameOver' | 'shop';
+export type ScreenId = 'home' | 'game' | 'gameOver' | 'shop' | 'challenges' | 'leaderboard';

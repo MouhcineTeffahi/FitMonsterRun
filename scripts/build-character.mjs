@@ -8,7 +8,7 @@
 // Output: src/assets/models/fit-monster.glb and fit-monster-anims.glb.
 // The outfit (mask, eyes, "N" harness, wristbands, shorts, leggings, sneakers) is
 // baked as geometry with a per-vertex `_REGION` id; the app colours regions per skin
-// (see REGION in src/components/game3d/fitMonster.ts — keep the ids in sync).
+// (see REGION_KEYS in src/game/player/fitMonster.ts — keep the ids in sync).
 // Requires ffmpeg on PATH (normal map processing).
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,11 +24,11 @@ if (!src) throw new Error('usage: node scripts/build-character.mjs <quaternius_i
 const out = path.resolve('src/assets/models');
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
 
-const KEEP_CLIPS = ['Sprint_Loop', 'Jump_Start', 'Jump_Loop', 'Jump_Land', 'Idle_Loop', 'Dance_Loop', 'Roll', 'Crouch_Fwd_Loop'];
+const KEEP_CLIPS = ['Sprint_Loop', 'Jump_Start', 'Jump_Loop', 'Jump_Land', 'Idle_Loop', 'Dance_Loop', 'Roll', 'Crouch_Fwd_Loop', 'Death01', 'Hit_Chest'];
 
 const R = {
   SKIN: 0, HEAD: 1, TORSO: 2, ARM: 3, HAND: 4, SHORTS: 5, LEGGINGS: 6, CALF: 7,
-  SHOE: 8, SOLE: 9, WRIST: 10, PIPING: 11, EMBLEM: 12, HARNESS: 13, EYES: 14,
+  SHOE: 8, SOLE: 9, WRIST: 10, PIPING: 11, EMBLEM: 12, HARNESS: 13, EYES: 14, SOCK: 15,
 };
 
 // Bind-pose landmarks (metres, +Y up, +Z = facing direction).
@@ -37,6 +37,7 @@ const HEM_Y = 0.76;
 const LEGGING_Y = 0.47;
 const SHOE_Y = 0.14;
 const SOLE_Y = 0.042;
+const SOCK_Y = 0.26;
 const WRIST_X = 0.70;
 const WRISTBAND = [WRIST_X - 0.06, WRIST_X - 0.008];
 
@@ -329,7 +330,8 @@ async function buildCharacter() {
     if (y > WAIST_Y - 0.03) return R.TORSO;
     if (y > HEM_Y) return R.SHORTS;
     if (y > LEGGING_Y + 0.03) return R.LEGGINGS;
-    if (y > SHOE_Y - 0.03) return R.CALF;
+    if (y > SOCK_Y) return R.CALF;
+    if (y > SHOE_Y - 0.03) return R.SOCK;
     return y < SOLE_Y ? R.SOLE : R.SHOE;
   };
   const vert = (part, v, r, p = get3(P, v)) =>
@@ -347,7 +349,7 @@ async function buildCharacter() {
       const ids = [I[t], I[t + 1], I[t + 2]];
       if (!select(ids)) continue;
       const ps = ids.map((v) => {
-        const p = add(get3(P, v), scale(smoothN(v), offset(get3(P, v))));
+        const p = add(get3(P, v), scale(smoothN(v), offset(get3(P, v), smoothN(v))));
         return clampP ? clampP(p) : p;
       });
       const r = typeof region === 'function' ? region(ps) : region;
@@ -387,8 +389,9 @@ async function buildCharacter() {
   );
   const shoes = shell(
     (ids) => centroid(ids)[1] < SHOE_Y + 0.02 && ids.every((v) => /foot|ball|calf/.test(dominant(v))),
-    (p) => (p[1] < 0.06 ? 0.02 : 0.014),
-    (p) => [p[0], Math.min(p[1], SHOE_Y), p[2]],
+    // Soles stay thin underneath (thick ones sank below the ground); toe caps and uppers are chunkier.
+    (p, n) => (n[1] < -0.5 ? 0.006 : n[2] > 0.4 ? 0.03 : p[1] < 0.06 ? 0.026 : 0.02),
+    (p) => [p[0], Math.max(-0.004, Math.min(p[1], SHOE_Y + 0.012)), p[2]],
     (ps) => (ps.reduce((s, p) => s + p[1], 0) / 3 < SOLE_Y ? R.SOLE : R.SHOE),
   );
 
@@ -465,7 +468,7 @@ async function buildCharacter() {
   projectDecal(eyes, front, { a0: -0.09, a1: 0.09, b0: 1.65, b1: 1.74, step: 0.002, lift: 0.0025, mask: eyeMask, region: R.EYES });
 
   // Stylised serif "N" on the sternum.
-  const NC = { x: 0, y: 1.39, w: 0.115, h: 0.105 };
+  const NC = { x: 0, y: 1.39, w: 0.134, h: 0.122 };
   const nMask = (a, b) => {
     const u = (a - NC.x) / NC.w + 0.5;
     const v = (b - NC.y) / NC.h + 0.5;
@@ -478,7 +481,7 @@ async function buildCharacter() {
     const serifBL = v <= 0.08 && u >= -0.06 && u <= 0.3;
     return leftStem || rightStem || diag || serifTL || serifTR || serifBL;
   };
-  projectDecal(decals, front, { a0: -0.08, a1: 0.08, b0: 1.33, b1: 1.45, step: 0.0022, lift: 0.004, mask: nMask, region: R.EMBLEM });
+  projectDecal(decals, front, { a0: -0.09, a1: 0.09, b0: 1.32, b1: 1.46, step: 0.002, lift: 0.004, mask: nMask, region: R.EMBLEM });
 
   // Harness straps.
   const S = 0.0115;

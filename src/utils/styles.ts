@@ -1,6 +1,7 @@
 import { StyleSheet, TextStyle, ViewStyle } from 'react-native';
 
 import { colors, radii, spacing } from '../data/theme';
+import { display } from '../ui/fonts';
 
 export const cardShadow: ViewStyle = {
   shadowColor: colors.shadow,
@@ -21,9 +22,9 @@ export const ui = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
+    ...display,
     color: colors.yellow,
     fontSize: 34,
-    fontWeight: '900',
     letterSpacing: 1,
     textAlign: 'center',
     textTransform: 'uppercase',
@@ -44,12 +45,14 @@ export const ui = StyleSheet.create({
     backgroundColor: colors.panel,
     borderRadius: radii.lg,
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: '#2A2A33',
+    borderWidth: 2,
+    borderColor: colors.border,
     ...cardShadow,
   },
   primaryBtn: {
     backgroundColor: colors.yellow,
+    borderBottomWidth: 4,
+    borderBottomColor: '#B86E00',
     borderRadius: radii.md,
     paddingVertical: 16,
     paddingHorizontal: 28,
@@ -59,9 +62,9 @@ export const ui = StyleSheet.create({
     ...cardShadow,
   },
   primaryBtnText: {
+    ...display,
     color: colors.black,
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 22,
     letterSpacing: 1,
     textTransform: 'uppercase',
   } as TextStyle,
@@ -73,13 +76,13 @@ export const ui = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 52,
-    borderWidth: 1,
-    borderColor: '#33333D',
+    borderWidth: 2,
+    borderColor: colors.border,
   },
   secondaryBtnText: {
+    ...display,
     color: colors.white,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 17,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   } as TextStyle,

@@ -8,21 +8,26 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { HUD } from '../components/HUD';
+import { MISSIONS, type ChallengeStat } from '../data/challenges';
+import { getSkin } from '../data/skins';
+import { colors, MAX_ENERGY } from '../data/theme';
 import {
   RunnerScene,
   type PickupEvent,
   type RunControls,
   type RunStats,
-} from '../components/game3d/RunnerScene';
-import { getSkin } from '../data/skins';
-import { colors, MAX_ENERGY } from '../data/theme';
+} from '../game/RunnerScene';
+import { clampLane } from '../game/sim/patterns';
+import { BASE_SPEED, LEVEL_BONUS_COINS, levelGoalFor } from '../game/sim/runSim';
 import { useProgressStore } from '../store/progressStore';
-import { clampLane } from '../utils/runner3d';
-import { BASE_SPEED } from '../utils/runSim';
-import { SpeedLines } from '../components/SpeedLines';
+import { display } from '../ui/fonts';
+import { HUD, type MissionView } from '../ui/HUD';
+import { LevelComplete } from '../ui/LevelComplete';
+import { SpeedLines } from '../ui/SpeedLines';
+import { Vignette } from '../ui/Vignette';
 
 type Props = {
+  /** Total coins earned this run (pickups + mission and level bonuses). */
   onGameOver: (runCoins: number) => void;
 };
 
@@ -34,15 +39,31 @@ const INITIAL_STATS: RunStats = {
   proteins: 0,
   multiplier: 1,
   speed: BASE_SPEED,
+  power: 0,
+  powerCharge: 0,
+  level: 1,
+  levelGoal: levelGoalFor(1),
+  roofs: 0,
+  junkDodged: 0,
 };
 
-const TOASTS: Partial<Record<PickupEvent, { text: string; color: string }>> = {
+type Toast = { text: string; color: string };
+
+const TOASTS: Partial<Record<PickupEvent, Toast>> = {
   healthy: { text: 'SAIN ! +ÉNERGIE', color: colors.green },
-  protein: { text: 'PROTÉINE ! 💪', color: '#42A5F5' },
+  protein: { text: 'PROTÉINE ! 💪', color: colors.protein },
   hit: { text: 'MALBOUFFE !', color: colors.red },
-  roof: { text: 'SUR LE TRAIN !', color: colors.yellow },
+  roof: { text: 'SUR LE CAMION !', color: colors.yellow },
   platform: { text: 'PLATEFORME !', color: '#00E5FF' },
+  power: { text: 'MODE POWER ! ⚡', color: colors.power },
+  smash: { text: 'SMASH !', color: '#FF7A45' },
 };
+
+const HINT_TIME_MS = 7000;
+
+function statValue(stats: RunStats, stat: ChallengeStat): number {
+  return Math.floor(stats[stat]);
+}
 
 export function GameScreen({ onGameOver }: Props) {
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
@@ -50,46 +71,77 @@ export function GameScreen({ onGameOver }: Props) {
   const finishRun = useProgressStore((s) => s.finishRun);
   const addCoins = useProgressStore((s) => s.addCoins);
   const resetRun = useProgressStore((s) => s.resetRun);
+  const recordRun = useProgressStore((s) => s.recordRun);
   const skin = useMemo(() => getSkin(selectedSkin), [selectedSkin]);
 
   const [paused, setPaused] = useState(false);
   const [stats, setStats] = useState<RunStats>(INITIAL_STATS);
-  const [toast, setToast] = useState<PickupEvent | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const [ready, setReady] = useState(false);
+  const [postFx, setPostFx] = useState(true);
+  const [hint, setHint] = useState(true);
+  const [levelDone, setLevelDone] = useState<{ level: number; score: number } | null>(null);
+  const [missionIdx, setMissionIdx] = useState(0);
+  const missionBase = useRef(0);
+  const missionIdxRef = useRef(0);
+  const bonusCoins = useRef(0);
+  const statsRef = useRef<RunStats>(INITIAL_STATS);
+  const levelsDone = useRef(0);
+
   const onReady = useCallback(() => setReady(true), []);
-  const controls = useRef<RunControls>({ lane: 1, jumpQueued: false, slideQueued: false, paused: false });
+  const controls = useRef<RunControls>({
+    lane: 1,
+    jumpQueued: false,
+    slideQueued: false,
+    paused: false,
+    celebrate: false,
+  });
   const endedRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = useSharedValue(0);
+  const flashColor = useSharedValue(0);
 
   useEffect(() => {
     resetRun();
+    const hintTimer = setTimeout(() => setHint(false), HINT_TIME_MS);
     return () => {
+      clearTimeout(hintTimer);
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, [resetRun]);
 
   useEffect(() => {
-    controls.current.paused = paused;
-  }, [paused]);
+    controls.current.paused = paused || levelDone !== null;
+    controls.current.celebrate = levelDone !== null;
+  }, [paused, levelDone]);
+
+  const showToast = useCallback((next: Toast, ms = 1400) => {
+    setToast(next);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), ms);
+  }, []);
+
+  const blocked = () => controls.current.paused || endedRef.current;
 
   const moveLane = useCallback((dir: -1 | 1) => {
-    const c = controls.current;
-    if (c.paused || endedRef.current) return;
-    c.lane = clampLane(c.lane + dir);
+    if (blocked()) return;
+    controls.current.lane = clampLane(controls.current.lane + dir);
   }, []);
 
   const jump = useCallback(() => {
-    const c = controls.current;
-    if (c.paused || endedRef.current) return;
-    c.jumpQueued = true;
+    if (blocked()) return;
+    controls.current.jumpQueued = true;
   }, []);
 
   const slide = useCallback(() => {
-    const c = controls.current;
-    if (c.paused || endedRef.current) return;
-    c.slideQueued = true;
+    if (blocked()) return;
+    controls.current.slideQueued = true;
+  }, []);
+
+  const togglePause = useCallback(() => {
+    if (controls.current.celebrate || endedRef.current) return;
+    setPaused((p) => !p);
   }, []);
 
   const swipe = useMemo(
@@ -117,39 +169,67 @@ export function GameScreen({ onGameOver }: Props) {
       else if (e.key === 'ArrowRight' || e.key === 'd') moveLane(1);
       else if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') jump();
       else if (e.key === 'ArrowDown' || e.key === 's') slide();
-      else if (e.key === 'Escape' || e.key === 'p') setPaused((p) => !p);
+      else if (e.key === 'Escape' || e.key === 'p') togglePause();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [jump, moveLane, slide]);
+  }, [jump, moveLane, slide, togglePause]);
+
+  /** Advances the bottom-box mission; rewards are banked and paid at game over. */
+  const checkMission = useCallback(
+    (next: RunStats) => {
+      const def = MISSIONS[missionIdxRef.current % MISSIONS.length];
+      if (statValue(next, def.stat) - missionBase.current < def.target) return;
+      bonusCoins.current += def.reward;
+      showToast({ text: `MISSION RÉUSSIE ! +${def.reward}`, color: colors.green }, 1800);
+      missionIdxRef.current += 1;
+      const following = MISSIONS[missionIdxRef.current % MISSIONS.length];
+      missionBase.current = statValue(next, following.stat);
+      setMissionIdx(missionIdxRef.current);
+    },
+    [showToast],
+  );
 
   const onStats = useCallback(
     (next: RunStats) => {
+      statsRef.current = next;
       setStats(next);
+      checkMission(next);
       applyRunTick({
         currentScore: next.score,
         currentDistance: next.distance,
         currentEnergy: next.energy,
       });
     },
-    [applyRunTick],
+    [applyRunTick, checkMission],
   );
 
   const onEvent = useCallback(
     (event: PickupEvent) => {
-      if (event === 'hit') {
+      if (event === 'level') {
+        // Freeze the sim this very frame; the effect above keeps it in sync.
+        controls.current.paused = true;
+        controls.current.celebrate = true;
+        levelsDone.current += 1;
+        bonusCoins.current += LEVEL_BONUS_COINS;
+        setToast(null);
+        setLevelDone({ level: levelsDone.current, score: statsRef.current.score });
+        return;
+      }
+      if (event === 'hit' || event === 'power') {
+        flashColor.value = event === 'hit' ? 0 : 1;
         flash.value = withSequence(
-          withTiming(0.45, { duration: 60 }),
-          withTiming(0, { duration: 260 }),
+          withTiming(event === 'hit' ? 0.45 : 0.35, { duration: 60 }),
+          withTiming(0, { duration: 320 }),
         );
       }
-      if (!TOASTS[event]) return;
-      setToast(event);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToast(null), 1400);
+      const t = TOASTS[event];
+      if (t) showToast(t);
     },
-    [flash],
+    [flash, flashColor, showToast],
   );
+
+  const nextLevel = useCallback(() => setLevelDone(null), []);
 
   const handleGameOver = useCallback(
     (final: RunStats) => {
@@ -158,21 +238,41 @@ export function GameScreen({ onGameOver }: Props) {
       applyRunTick({
         currentScore: final.score,
         currentDistance: final.distance,
-        currentEnergy: 0,
+        currentEnergy: final.energy,
       });
       finishRun();
-      if (final.coins > 0) addCoins(final.coins);
-      onGameOver(final.coins);
+      recordRun({
+        score: final.score,
+        proteins: final.proteins,
+        junkDodged: final.junkDodged,
+        distance: final.distance,
+        coins: final.coins,
+        roofs: final.roofs,
+      });
+      const earned = final.coins + bonusCoins.current;
+      if (earned > 0) addCoins(earned);
+      onGameOver(earned);
     },
-    [addCoins, applyRunTick, finishRun, onGameOver],
+    [addCoins, applyRunTick, finishRun, onGameOver, recordRun],
   );
 
   const quit = useCallback(() => {
     controls.current.paused = true;
-    handleGameOver(stats);
-  }, [handleGameOver, stats]);
+    handleGameOver(statsRef.current);
+  }, [handleGameOver]);
 
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: flash.value,
+    backgroundColor: flashColor.value > 0.5 ? colors.power : colors.red,
+  }));
+
+  const missionDef = MISSIONS[missionIdx % MISSIONS.length];
+  const mission: MissionView = {
+    label: missionDef.label,
+    progress: Math.max(0, statValue(stats, missionDef.stat) - missionBase.current),
+    target: missionDef.target,
+    icon: missionDef.icon,
+  };
 
   return (
     <View style={styles.root}>
@@ -185,37 +285,41 @@ export function GameScreen({ onGameOver }: Props) {
             onEvent={onEvent}
             onGameOver={handleGameOver}
             onReady={onReady}
+            onPostFx={setPostFx}
           />
         </View>
       </GestureDetector>
 
+      {!postFx ? <Vignette /> : null}
       <SpeedLines speed={stats.speed} />
       <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
 
-      {toast && TOASTS[toast] ? (
+      {toast && !levelDone ? (
         <View style={styles.toast} pointerEvents="none">
-          <Text style={[styles.toastText, { color: TOASTS[toast]!.color }]}>
-            {TOASTS[toast]!.text}
+          <Text style={[styles.toastText, { color: toast.color }]}>{toast.text}</Text>
+        </View>
+      ) : null}
+
+      {levelDone ? null : (
+        <HUD stats={stats} mission={mission} paused={paused} onPause={togglePause} />
+      )}
+
+      {hint && ready && !levelDone ? (
+        <View style={styles.hint} pointerEvents="none">
+          <Text style={styles.hintText}>
+            Gauche/droite : voie · Haut : sauter · Bas : glisser · Monte sur les camions !
           </Text>
         </View>
       ) : null}
 
-      <HUD
-        score={stats.score}
-        coins={stats.coins}
-        distance={stats.distance}
-        energy={stats.energy}
-        proteins={stats.proteins}
-        multiplier={stats.multiplier}
-        paused={paused}
-        onPause={() => setPaused((p) => !p)}
-      />
-
-      <View style={styles.hint} pointerEvents="none">
-        <Text style={styles.hintText}>
-          Gauche/droite : voie · Haut : sauter · Bas : glisser · Monte sur les trains !
-        </Text>
-      </View>
+      {levelDone ? (
+        <LevelComplete
+          level={levelDone.level}
+          score={levelDone.score}
+          bonus={LEVEL_BONUS_COINS}
+          onNext={nextLevel}
+        />
+      ) : null}
 
       {!ready ? (
         <View style={styles.loading} pointerEvents="none">
@@ -225,12 +329,12 @@ export function GameScreen({ onGameOver }: Props) {
 
       {paused ? (
         <View style={styles.pauseOverlay}>
-          <Text style={styles.pauseTitle}>Pause</Text>
+          <Text style={styles.pauseTitle}>PAUSE</Text>
           <Pressable style={styles.pauseBtn} onPress={() => setPaused(false)}>
-            <Text style={styles.pauseBtnTextDark}>Reprendre</Text>
+            <Text style={styles.pauseBtnTextDark}>REPRENDRE</Text>
           </Pressable>
           <Pressable style={[styles.pauseBtn, styles.quitBtn]} onPress={quit}>
-            <Text style={styles.pauseBtnText}>Quitter</Text>
+            <Text style={styles.pauseBtnText}>QUITTER</Text>
           </Pressable>
         </View>
       ) : null}
@@ -253,32 +357,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
+    ...display,
     color: colors.yellow,
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 26,
   },
   flash: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.red,
   },
   toast: {
     position: 'absolute',
-    top: '30%',
+    top: '26%',
     left: 0,
     right: 0,
     alignItems: 'center',
   },
   toastText: {
+    ...display,
     fontSize: 30,
-    fontWeight: '900',
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(10,16,32,0.78)',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 999,
     overflow: 'hidden',
     textShadowColor: '#000',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    textShadowRadius: 4,
   },
   hint: {
     position: 'absolute',
@@ -288,10 +391,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   hintText: {
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 12,
     fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 999,
@@ -299,39 +402,42 @@ const styles = StyleSheet.create({
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#000000CC',
+    backgroundColor: 'rgba(10,16,32,0.82)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 14,
     paddingHorizontal: 28,
   },
   pauseTitle: {
+    ...display,
     color: colors.yellow,
-    fontSize: 34,
-    fontWeight: '900',
+    fontSize: 44,
     marginBottom: 8,
   },
   pauseBtn: {
     backgroundColor: colors.yellow,
+    borderBottomWidth: 4,
+    borderBottomColor: '#B86E00',
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 28,
-    minWidth: 200,
+    minWidth: 220,
     alignItems: 'center',
   },
   quitBtn: {
     backgroundColor: colors.panelElevated,
-    borderWidth: 1,
-    borderColor: '#33333D',
+    borderBottomColor: '#0A1020',
+    borderWidth: 2,
+    borderColor: colors.border,
   },
   pauseBtnText: {
+    ...display,
     color: colors.white,
-    fontWeight: '900',
-    fontSize: 16,
+    fontSize: 20,
   },
   pauseBtnTextDark: {
+    ...display,
     color: colors.black,
-    fontWeight: '900',
-    fontSize: 16,
+    fontSize: 20,
   },
 });

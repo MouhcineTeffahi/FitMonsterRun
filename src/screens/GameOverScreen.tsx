@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, spacing } from '../data/theme';
 import { useProgressStore } from '../store/progressStore';
+import { display } from '../ui/fonts';
 import { ui } from '../utils/styles';
 
 type Props = {
@@ -19,7 +20,7 @@ export function GameOverScreen({ runCoins, onRestart, onHome }: Props) {
   return (
     <SafeAreaView style={ui.screen}>
       <View style={styles.content}>
-        <Text style={styles.title}>Partie terminée</Text>
+        <Text style={styles.title}>PARTIE TERMINÉE</Text>
 
         <View style={styles.panel}>
           <Stat label="SCORE" value={String(lastScore)} />
@@ -29,10 +30,10 @@ export function GameOverScreen({ runCoins, onRestart, onHome }: Props) {
         </View>
 
         <Pressable style={ui.primaryBtn} onPress={onRestart}>
-          <Text style={ui.primaryBtnText}>Rejouer</Text>
+          <Text style={ui.primaryBtnText}>REJOUER</Text>
         </Pressable>
         <Pressable style={ui.secondaryBtn} onPress={onHome}>
-          <Text style={ui.secondaryBtnText}>Accueil</Text>
+          <Text style={ui.secondaryBtnText}>ACCUEIL</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -64,11 +65,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
   },
   title: {
+    ...display,
     color: colors.yellow,
-    fontSize: 32,
-    fontWeight: '900',
+    fontSize: 40,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
@@ -76,8 +80,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel,
     borderRadius: radii.lg,
     padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: '#2A2A33',
+    borderWidth: 2,
+    borderColor: colors.border,
     gap: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -88,14 +92,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   statLabel: {
+    ...display,
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 15,
     flexShrink: 1,
   },
   statValue: {
+    ...display,
     color: colors.white,
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 26,
   },
 });

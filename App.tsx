@@ -5,11 +5,15 @@ import { StatusBar } from 'expo-status-bar';
 
 import type { ScreenId } from './src/data/types';
 import { colors } from './src/data/theme';
+import { preloadSfx, setSfxEnabled } from './src/game/audio/sfx';
+import { ChallengesScreen } from './src/screens/ChallengesScreen';
 import { GameOverScreen } from './src/screens/GameOverScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { ShopScreen } from './src/screens/ShopScreen';
 import { useProgressStore } from './src/store/progressStore';
+import { useAppFonts } from './src/ui/fonts';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>('home');
@@ -17,12 +21,19 @@ export default function App() {
   const hydrated = useProgressStore((s) => s.hydrated);
   const loadProgress = useProgressStore((s) => s.loadProgress);
   const resetRun = useProgressStore((s) => s.resetRun);
+  const soundEnabled = useProgressStore((s) => s.soundEnabled);
+  const fontsReady = useAppFonts();
 
   useEffect(() => {
     void loadProgress();
+    preloadSfx();
   }, [loadProgress]);
 
-  if (!hydrated) {
+  useEffect(() => {
+    setSfxEnabled(soundEnabled);
+  }, [soundEnabled]);
+
+  if (!hydrated || !fontsReady) {
     return (
       <View style={styles.boot}>
         <ActivityIndicator color={colors.yellow} size="large" />
@@ -31,17 +42,22 @@ export default function App() {
     );
   }
 
+  const startRun = () => {
+    resetRun();
+    setRunCoins(0);
+    setScreen('game');
+  };
+  const home = () => setScreen('home');
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <StatusBar style="light" />
       {screen === 'home' ? (
         <HomeScreen
-          onPlay={() => {
-            resetRun();
-            setRunCoins(0);
-            setScreen('game');
-          }}
+          onPlay={startRun}
           onShop={() => setScreen('shop')}
+          onChallenges={() => setScreen('challenges')}
+          onLeaderboard={() => setScreen('leaderboard')}
         />
       ) : null}
       {screen === 'game' ? (
@@ -53,19 +69,11 @@ export default function App() {
         />
       ) : null}
       {screen === 'gameOver' ? (
-        <GameOverScreen
-          runCoins={runCoins}
-          onRestart={() => {
-            resetRun();
-            setRunCoins(0);
-            setScreen('game');
-          }}
-          onHome={() => setScreen('home')}
-        />
+        <GameOverScreen runCoins={runCoins} onRestart={startRun} onHome={home} />
       ) : null}
-      {screen === 'shop' ? (
-        <ShopScreen onBack={() => setScreen('home')} />
-      ) : null}
+      {screen === 'shop' ? <ShopScreen onBack={home} /> : null}
+      {screen === 'challenges' ? <ChallengesScreen onBack={home} /> : null}
+      {screen === 'leaderboard' ? <LeaderboardScreen onBack={home} /> : null}
     </GestureHandlerRootView>
   );
 }

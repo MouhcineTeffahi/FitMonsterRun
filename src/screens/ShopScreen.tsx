@@ -1,24 +1,20 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { MonsterPreview } from '../components/MonsterPreview';
-import { MonsterShowcase } from '../components/game3d/MonsterShowcase';
 import { getSkin, SKINS, type SkinId } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
+import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
+import { display } from '../ui/fonts';
+import { MonsterPreview } from '../ui/MonsterPreview';
+import { ScreenHeader } from '../ui/ScreenHeader';
 import { ui } from '../utils/styles';
 
 type Props = {
   onBack: () => void;
 };
 
+/** BOUTIQUE / SKINS: live 3D preview on top, 2×2 grid of skin cards below. */
 export function ShopScreen({ onBack }: Props) {
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
@@ -27,222 +23,208 @@ export function ShopScreen({ onBack }: Props) {
   const unlockSkin = useProgressStore((s) => s.unlockSkin);
   const selectSkin = useProgressStore((s) => s.selectSkin);
 
-  const cards = useMemo(() => SKINS, []);
   const [previewId, setPreviewId] = useState<SkinId>(selectedSkin);
   const preview = getSkin(previewId);
+  const unlocked = unlockedSkins.includes(previewId);
+  const selected = selectedSkin === previewId;
+  const canAfford = totalCoins >= preview.price;
 
-  const onBuy = (id: SkinId, price: number) => {
-    if (unlockedSkins.includes(id)) return;
-    if (!spendCoins(price)) return;
-    unlockSkin(id);
-    selectSkin(id);
-    setPreviewId(id);
+  const onAction = () => {
+    if (selected) return;
+    if (unlocked) {
+      selectSkin(previewId);
+      return;
+    }
+    if (!spendCoins(preview.price)) return;
+    unlockSkin(previewId);
+    selectSkin(previewId);
   };
+
+  const actionLabel = selected
+    ? 'SÉLECTIONNÉ ✓'
+    : unlocked
+      ? 'SÉLECTIONNER'
+      : canAfford
+        ? `ACHETER · ${preview.price}`
+        : `IL MANQUE ${preview.price - totalCoins}`;
 
   return (
     <SafeAreaView style={ui.screen}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </Pressable>
-        <Text style={styles.title}>Boutique</Text>
-        <View style={styles.coinsPill}>
-          <Text style={styles.coinDot}>●</Text>
-          <Text style={styles.coinsText}>{totalCoins}</Text>
+      <ScreenHeader title="BOUTIQUE / SKINS" onBack={onBack} coins={totalCoins} />
+
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.stage}>
+          <View style={styles.stageGlow} />
+          <MonsterShowcase skin={preview} style={styles.showcase} />
+          <Text style={styles.stageName}>{preview.name.toUpperCase()}</Text>
         </View>
-      </View>
 
-      <View style={styles.stage}>
-        <MonsterShowcase skin={preview} style={styles.showcase} />
-        <Text style={styles.stageName}>{preview.name}</Text>
-      </View>
+        <Pressable
+          style={[
+            selected ? ui.secondaryBtn : ui.primaryBtn,
+            styles.action,
+            !selected && !unlocked && !canAfford && styles.disabled,
+          ]}
+          disabled={selected || (!unlocked && !canAfford)}
+          onPress={onAction}
+          accessibilityRole="button"
+        >
+          <Text style={selected ? ui.secondaryBtnText : ui.primaryBtnText}>{actionLabel}</Text>
+        </Pressable>
 
-      <ScrollView
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      >
-        {cards.map((skin) => {
-          const unlocked = unlockedSkins.includes(skin.id);
-          const selected = selectedSkin === skin.id;
-          const canAfford = totalCoins >= skin.price;
-
-          return (
-            <Pressable
-              key={skin.id}
-              onPress={() => setPreviewId(skin.id)}
-              style={[
-                styles.card,
-                previewId === skin.id && styles.cardPreviewed,
-                selected && styles.cardSelected,
-              ]}
-            >
-              <View style={styles.previewBox}>
-                <MonsterPreview skin={skin} size={104} />
-              </View>
-              <View style={styles.meta}>
-                <Text style={styles.skinName}>{skin.name}</Text>
-                <Text style={styles.price}>
-                  {skin.price === 0 ? 'Gratuit' : `${skin.price} pièces`}
+        <View style={styles.grid}>
+          {SKINS.map((skin) => {
+            const owned = unlockedSkins.includes(skin.id);
+            const isSelected = selectedSkin === skin.id;
+            return (
+              <Pressable
+                key={skin.id}
+                onPress={() => setPreviewId(skin.id)}
+                style={[
+                  styles.card,
+                  previewId === skin.id && styles.cardPreviewed,
+                  isSelected && styles.cardSelected,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={skin.name}
+              >
+                <View style={styles.cardArt}>
+                  <MonsterPreview skin={skin} size={118} />
+                </View>
+                <Text style={styles.cardName} numberOfLines={1}>
+                  {skin.name.replace(' Mode', '').replace(' Yellow', '').toUpperCase()}
                 </Text>
-                <Text style={styles.state}>
-                  {unlocked ? 'Débloqué' : 'Verrouillé'}
-                </Text>
-
-                {unlocked ? (
-                  <Pressable
-                    style={[
-                      selected ? ui.primaryBtn : ui.secondaryBtn,
-                      styles.action,
-                    ]}
-                    onPress={() => selectSkin(skin.id)}
-                  >
-                    <Text
-                      style={
-                        selected ? ui.primaryBtnText : ui.secondaryBtnText
-                      }
-                    >
-                      {selected ? 'Sélectionné' : 'Sélectionner'}
-                    </Text>
-                  </Pressable>
+                {isSelected ? (
+                  <View style={styles.check}>
+                    <Text style={styles.checkText}>✓</Text>
+                  </View>
+                ) : owned ? (
+                  <Text style={styles.owned}>DÉBLOQUÉ</Text>
                 ) : (
-                  <Pressable
-                    style={[
-                      ui.primaryBtn,
-                      styles.action,
-                      !canAfford && styles.disabled,
-                    ]}
-                    disabled={!canAfford}
-                    onPress={() => onBuy(skin.id, skin.price)}
-                  >
-                    <Text style={ui.primaryBtnText}>
-                      {canAfford ? 'Acheter' : 'Pas assez'}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.price}>{skin.price}</Text>
+                    <View style={styles.coin} />
+                  </View>
                 )}
-              </View>
-            </Pressable>
-          );
-        })}
+              </Pressable>
+            );
+          })}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.sm,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backText: {
-    color: colors.white,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  title: {
-    flex: 1,
-    color: colors.yellow,
-    fontSize: 26,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  coinsPill: {
-    backgroundColor: colors.black,
-    borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  coinDot: { color: colors.yellow, fontSize: 12 },
-  coinsText: { color: colors.white, fontWeight: '900' },
-  list: {
+  scroll: {
     padding: spacing.md,
     gap: spacing.md,
     paddingBottom: spacing.xl,
-  },
-  card: {
-    backgroundColor: colors.panel,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    flexDirection: 'row',
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: '#2A2A33',
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
   stage: {
-    marginHorizontal: spacing.md,
-    height: 230,
+    height: 250,
     borderRadius: radii.lg,
     backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: '#2A2A33',
+    borderWidth: 2,
+    borderColor: colors.border,
     overflow: 'hidden',
+  },
+  stageGlow: {
+    position: 'absolute',
+    left: '20%',
+    right: '20%',
+    top: '18%',
+    bottom: '6%',
+    borderRadius: 999,
+    backgroundColor: 'rgba(252,178,2,0.12)',
   },
   showcase: {
     ...StyleSheet.absoluteFill,
   },
   stageName: {
+    ...display,
     position: 'absolute',
     left: spacing.md,
     bottom: spacing.sm,
     color: colors.yellow,
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 20,
+  },
+  action: {
+    minHeight: 52,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
+  },
+  card: {
+    width: '48.5%',
+    backgroundColor: colors.panel,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    gap: 4,
   },
   cardPreviewed: {
-    borderColor: '#5A5A66',
+    borderColor: '#6B7DB0',
+    backgroundColor: colors.panelElevated,
   },
   cardSelected: {
     borderColor: colors.yellow,
-    borderWidth: 2,
   },
-  previewBox: {
-    backgroundColor: colors.black,
-    borderRadius: radii.md,
-    padding: spacing.sm,
+  cardArt: {
+    height: 124,
+    justifyContent: 'center',
+  },
+  cardName: {
+    ...display,
+    color: colors.white,
+    fontSize: 17,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  price: {
+    ...display,
+    color: colors.yellow,
+    fontSize: 17,
+  },
+  coin: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFC21A',
+    borderWidth: 2,
+    borderColor: '#FFE88A',
+  },
+  owned: {
+    ...display,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 22,
+  },
+  check: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  meta: {
-    flex: 1,
-    gap: 4,
-    justifyContent: 'center',
-  },
-  skinName: {
+  checkText: {
     color: colors.white,
-    fontSize: 18,
     fontWeight: '900',
-  },
-  price: {
-    color: colors.yellow,
     fontSize: 14,
-    fontWeight: '800',
-  },
-  state: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  action: {
-    minHeight: 44,
-    paddingVertical: 10,
-  },
-  disabled: {
-    opacity: 0.45,
   },
 });

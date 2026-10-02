@@ -1,125 +1,230 @@
 import React from 'react';
-import {
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
+import { DAILY_CHALLENGES, todayKey } from '../data/challenges';
 import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
+import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
+import { display } from '../ui/fonts';
+import { Logo } from '../ui/Logo';
+import { MenuBackdrop } from '../ui/MenuBackdrop';
 import { ui } from '../utils/styles';
-import { MonsterShowcase } from '../components/game3d/MonsterShowcase';
 
 type Props = {
   onPlay: () => void;
   onShop: () => void;
+  onChallenges: () => void;
+  onLeaderboard: () => void;
 };
 
-export function HomeScreen({ onPlay, onShop }: Props) {
+export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Props) {
   const bestScore = useProgressStore((s) => s.bestScore);
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
+  const soundEnabled = useProgressStore((s) => s.soundEnabled);
+  const toggleSound = useProgressStore((s) => s.toggleSound);
+  const daily = useProgressStore((s) => s.daily);
   const skin = getSkin(selectedSkin);
 
+  const today = daily.date === todayKey() ? daily : null;
+  const claimable = today
+    ? DAILY_CHALLENGES.filter(
+        (c) => !today.claimed.includes(c.id) && (today.progress[c.stat] ?? 0) >= c.target,
+      ).length
+    : 0;
+
   return (
-    <SafeAreaView style={ui.screen}>
-      <View style={styles.content}>
-        <Text style={styles.brand}>FIT MONSTER</Text>
-        <Text style={styles.brandRun}>RUN</Text>
-
-        <View style={styles.heroCard}>
-          <MonsterShowcase skin={skin} style={styles.showcase} />
+    <View style={ui.screen}>
+      <MenuBackdrop />
+      <MonsterShowcase skin={skin} mode="hero" floor={false} style={styles.hero} />
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.topBar}>
+          <View style={styles.pill}>
+            <View style={styles.coin} />
+            <Text style={styles.pillText}>{totalCoins}</Text>
+          </View>
+          <Pressable
+            style={styles.iconBtn}
+            onPress={toggleSound}
+            accessibilityRole="button"
+            accessibilityLabel={soundEnabled ? 'Couper le son' : 'Activer le son'}
+          >
+            <Text style={styles.iconText}>{soundEnabled ? '🔊' : '🔇'}</Text>
+          </Pressable>
         </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>MEILLEUR SCORE</Text>
-            <Text style={styles.statValue}>{bestScore}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>PIÈCES</Text>
-            <Text style={[styles.statValue, { color: colors.yellow }]}>
-              {totalCoins}
-            </Text>
-          </View>
+        <View style={styles.brand}>
+          <Logo width={270} />
+          <Text style={styles.tagline}>
+            COURS. MANGE SAIN.{'\n'}DEVIENS LA MEILLEURE VERSION{'\n'}DE TOI-MÊME !
+          </Text>
         </View>
 
-        <Pressable style={ui.primaryBtn} onPress={onPlay}>
-          <Text style={ui.primaryBtnText}>Jouer</Text>
-        </Pressable>
+        <View style={styles.flex} />
 
-        <Pressable style={[ui.secondaryBtn, styles.shopBtn]} onPress={onShop}>
-          <Text style={ui.secondaryBtnText}>Boutique</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+        <View style={styles.menu}>
+          <Text style={styles.best}>MEILLEUR SCORE : {bestScore}</Text>
+          <Pressable style={[ui.primaryBtn, styles.playBtn]} onPress={onPlay} accessibilityRole="button">
+            <Text style={[ui.primaryBtnText, styles.playText]}>JOUER</Text>
+          </Pressable>
+          <View style={styles.row}>
+            <MenuButton label="BOUTIQUE" onPress={onShop} />
+            <MenuButton label="DÉFIS" onPress={onChallenges} badge={claimable} />
+          </View>
+          <MenuButton label="🏆  CLASSEMENT" onPress={onLeaderboard} />
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function MenuButton({ label, onPress, badge = 0 }: { label: string; onPress: () => void; badge?: number }) {
+  return (
+    <Pressable style={styles.menuBtn} onPress={onPress} accessibilityRole="button">
+      <Text style={styles.menuText}>{label}</Text>
+      {badge > 0 ? (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>!</Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  safe: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+  },
+  flex: {
+    flex: 1,
+  },
+  hero: {
+    position: 'absolute',
+    right: '-14%',
+    top: '12%',
+    width: '90%',
+    height: '68%',
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(10,16,32,0.8)',
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    height: 38,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  coin: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFC21A',
+    borderWidth: 2,
+    borderColor: '#FFE88A',
+  },
+  pillText: {
+    ...display,
+    color: colors.white,
+    fontSize: 18,
+  },
+  iconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(10,16,32,0.8)',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  iconText: {
+    fontSize: 18,
   },
   brand: {
-    color: colors.yellow,
-    fontSize: 36,
-    fontWeight: '900',
-    textAlign: 'center',
-    letterSpacing: 2,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    alignItems: 'flex-start',
   },
-  brandRun: {
+  tagline: {
+    ...display,
     color: colors.white,
-    fontSize: 42,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginTop: -8,
-    letterSpacing: 4,
+    fontSize: 14,
+    lineHeight: 18,
+    marginTop: -4,
+    marginLeft: 10,
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 3,
   },
-  heroCard: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    backgroundColor: colors.panel,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#2A2A33',
-    marginVertical: spacing.sm,
-  },
-  showcase: {
+  menu: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+    alignSelf: 'center',
     width: '100%',
-    height: 300,
+    maxWidth: 420,
   },
-  statsRow: {
+  best: {
+    ...display,
+    color: colors.white,
+    textAlign: 'center',
+    fontSize: 15,
+    textShadowColor: '#000',
+    textShadowRadius: 3,
+  },
+  playBtn: {
+    minHeight: 64,
+  },
+  playText: {
+    fontSize: 30,
+  },
+  row: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  statCard: {
+  menuBtn: {
     flex: 1,
-    backgroundColor: colors.black,
+    minHeight: 50,
     borderRadius: radii.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: '#2A2A33',
+    backgroundColor: 'rgba(20,29,51,0.94)',
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderBottomWidth: 4,
+    borderBottomColor: '#070B16',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  statValue: {
+  menuText: {
+    ...display,
     color: colors.white,
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 18,
   },
-  shopBtn: {
-    marginTop: 4,
+  badge: {
+    position: 'absolute',
+    top: -8,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.red,
+    borderWidth: 2,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    ...display,
+    color: colors.white,
+    fontSize: 14,
   },
 });
