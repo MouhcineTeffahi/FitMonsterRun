@@ -228,55 +228,6 @@ export type WalkRig = {
 };
 
 /**
- * Dress the OpenGameArt "Fatty" mesh (CC0) with a stretched tee + shorts so it
- * reads as a couch-potato pedestrian instead of a nude basemesh.
- */
-export function clothedFatGuy(model: THREE.Object3D, shirt = '#E23B3B'): THREE.Group {
-  const root = new THREE.Group();
-  const body = new THREE.Group();
-  // Model faces +Z in the OBJ; runner camera looks down -Z, so turn around.
-  model.rotation.y = Math.PI;
-  model.traverse((o) => {
-    const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const m of mats) {
-      const std = m as THREE.MeshStandardMaterial;
-      if (std.map) std.map.colorSpace = THREE.SRGBColorSpace;
-      std.roughness = 0.72;
-      std.metalness = 0.05;
-      std.needsUpdate = true;
-    }
-  });
-  body.add(model);
-
-  const tee = new THREE.Mesh(
-    new THREE.SphereGeometry(0.52, 18, 14),
-    new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.55, metalness: 0.02 }),
-  );
-  tee.scale.set(1.95, 1.12, 1.65);
-  tee.position.set(0, 1.18, 0.06);
-  tee.castShadow = true;
-  body.add(tee);
-
-  const shorts = new THREE.Mesh(
-    new THREE.SphereGeometry(0.4, 16, 12),
-    new THREE.MeshStandardMaterial({ color: '#24324A', roughness: 0.62, metalness: 0.02 }),
-  );
-  shorts.scale.set(1.7, 0.9, 1.45);
-  shorts.position.set(0, 0.58, 0.04);
-  shorts.castShadow = true;
-  body.add(shorts);
-
-  root.add(body);
-  root.userData.walk = { body } satisfies WalkRig;
-  return root;
-}
-
-/**
  * Street pedestrian in a hoodie and sneakers. Legs and arms are pivots so the
  * pool can cycle a walk. Contact is a hand slap or a foot kick.
  */

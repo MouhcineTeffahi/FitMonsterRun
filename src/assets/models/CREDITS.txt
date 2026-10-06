@@ -7,9 +7,9 @@ Kenney (www.kenney.nl) - Food Kit 2.0 — CC0
 
 protein-tub.glb <- "Protein Powder" by Zsky on Poly Pizza
   https://poly.pizza/m/w9sWcWlV9i — Creative Commons Attribution (CC-BY)
-fat-guy.glb <- "Fatty" by Drummyfish on OpenGameArt
-  https://opengameart.org/content/fatty — Public Domain (CC0)
-  Converted OBJ+diffuse → GLB; in-game tee/shorts overlays added.
+pedestrians.glb <- Kenney (www.kenney.nl) "Mini Characters" — CC0
+  12 characters (male/female a–f) with walk, sprint, fall and emote-yes clips,
+  merged into one file by scripts/build-pedestrians.mjs.
 
 fit-monster.glb <- Quaternius "Universal Base Characters" Superhero Male (CC0),
   restyled by scripts/build-character.mjs into the Fit Monster: smoothed mask

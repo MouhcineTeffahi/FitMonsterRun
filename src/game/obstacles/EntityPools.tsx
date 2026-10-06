@@ -1,7 +1,7 @@
 import { useLoader } from '@react-three/fiber';
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { colors } from '../../data/theme';
 import { modelUrl, normalizedClone, type ModelKey } from '../../utils/models';
@@ -22,7 +22,6 @@ import {
 } from '../sim/patterns';
 import { hide, instanced, paint, propMaterial, put } from '../world/kit';
 import {
-  clothedFatGuy,
   coinGeometry,
   coinMaterial,
   glowTexture,
@@ -34,6 +33,7 @@ import {
   waterBottle,
   type WalkRig,
 } from './items';
+import { PedestrianRig } from './pedestrians';
 import { TRUCK_COLORS, truckGeometry } from './trucks';
 
 const FOOD_MODELS: Partial<Record<Variant3D, { key: ModelKey; size: number }>> = {
@@ -64,10 +64,11 @@ export class ObstaclePools {
   private readonly truckSeed = {} as Record<TruckVariant, Float32Array>;
   private readonly headGlow: THREE.InstancedMesh;
   private readonly coins: THREE.InstancedMesh;
+  private readonly peds: PedestrianRig[] = [];
 
   constructor(
     foods: Partial<Record<Variant3D, THREE.Object3D>>,
-    extras: { proteinTub?: THREE.Object3D; fatGuy?: THREE.Object3D },
+    extras: { proteinTub?: THREE.Object3D; pedestrians?: GLTF },
   ) {
     const truckMat = propMaterial({ roughness: 0.42, metalness: 0.08 });
     for (const v of TRUCK_VARIANTS) {
@@ -114,18 +115,19 @@ export class ObstaclePools {
       return healthyPickup(proteinShaker(), '#D4A017');
     });
     let shirt = 0;
-    // OpenGameArt "Fatty" (CC0) — real overweight mesh with tee/shorts overlays.
+    // Kenney Mini Characters (CC0): 12 animated townsfolk, two per pooled slot.
     build('slacker', () => {
-      const color = SHIRTS[shirt++ % SHIRTS.length];
-      if (extras.fatGuy) {
+      const n = shirt++;
+      if (extras.pedestrians) {
         try {
-          const mesh = normalizedClone(extras.fatGuy, { height: 2.05, anchor: 'base', shadows: true });
-          return clothedFatGuy(mesh, color);
+          const rig = new PedestrianRig(extras.pedestrians, n, n + POOL_SIZES.slacker);
+          this.peds[n] = rig;
+          return rig.root;
         } catch {
-          // Fall through to the cartoon pedestrian.
+          // Fall through to the procedural pedestrian.
         }
       }
-      return slackerFigure(color);
+      return slackerFigure(SHIRTS[n % SHIRTS.length]);
     });
     (Object.keys(FOOD_MODELS) as Variant3D[]).forEach((v) => {
       const def = FOOD_MODELS[v]!;
@@ -180,8 +182,12 @@ export class ObstaclePools {
       g.rotation.y = t * 1.6 + slot.seed * 6.28;
       g.position.y += Math.sin(t * 2.6 + slot.seed * 6.28) * 0.12;
     } else if (slot.kind === 'slap') {
+      const rig = this.peds[i];
       const walk = (g.children[0]?.userData.walk ?? null) as WalkRig | null;
-      if (slot.popT < 0 && walk) {
+      if (rig) {
+        g.rotation.set(0, 0, 0);
+        rig.update(slot, t);
+      } else if (slot.popT < 0 && walk) {
         const phase = t * 6.5 + slot.seed * 6.28;
         const step = Math.sin(phase);
         if (walk.legs && walk.arms) {
@@ -226,7 +232,7 @@ export function useObstaclePools(): ObstaclePools {
   const urls = [
     ...FOOD_ENTRIES.map(([, def]) => modelUrl(def.key)),
     modelUrl('proteinTub'),
-    modelUrl('fatGuy'),
+    modelUrl('pedestrians'),
   ];
   const loaded = useLoader(GLTFLoader, urls);
   return useMemo(() => {
@@ -236,7 +242,7 @@ export function useObstaclePools(): ObstaclePools {
     });
     return new ObstaclePools(map, {
       proteinTub: loaded[FOOD_ENTRIES.length]?.scene,
-      fatGuy: loaded[FOOD_ENTRIES.length + 1]?.scene,
+      pedestrians: loaded[FOOD_ENTRIES.length + 1],
     });
   }, [loaded]);
 }

@@ -53,7 +53,12 @@ const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
   kick: 'smash',
   power: 'power',
   level: 'confetti',
+  convert: 'confetti',
+  burp: 'burp',
+  bonk: 'stars',
 };
+
+const BURST_Y: Partial<Record<RunEvent, number>> = { coin: 1.1, level: 2.5, convert: 1.2, burp: 1.4, bonk: 1.9 };
 
 const BASE_FOV = 62;
 /** Seconds the death animation plays before the Game Over screen. */
@@ -142,7 +147,7 @@ function Game({ skin, controls, onStats, onEvent, onGameOver, onReady, onPostFx 
     (event: RunEvent) => {
       const s = run.current;
       const burst = BURST_FOR[event];
-      if (burst) vfx.current?.burst(burst, s.x, s.y + (event === 'coin' ? 1.1 : event === 'level' ? 2.5 : 0.15), PLAYER_Z - 0.2);
+      if (burst) vfx.current?.burst(burst, s.x, s.y + (BURST_Y[event] ?? 0.15), PLAYER_Z - 0.2);
       if (event === 'speedup' || event === 'power') fovPunch.current = 10;
       if (event === 'hit') s.shake = Math.max(s.shake, 0.55);
       playEventSfx(event);

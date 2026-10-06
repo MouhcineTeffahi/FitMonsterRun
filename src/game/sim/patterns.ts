@@ -24,7 +24,7 @@ export const TRUCKS = {
 export type TruckVariant = keyof typeof TRUCKS;
 /** Extra closing speed of oncoming trucks (units/s, toward the runner). */
 export const ONCOMING_SPEED = 9;
-/** Fat pedestrians walk toward the runner, slower than traffic. */
+/** Couch-potato pedestrians walk toward the runner, slower than traffic. */
 export const WALK_SPEED = 3.6;
 
 /** Raised walkways / moving platforms. */
@@ -77,7 +77,7 @@ export const POOL_SIZES: Record<Variant3D, number> = {
   apple: 3,
   whey: 4,
   water: 3,
-  slacker: 6,
+  slacker: 8,
 };
 
 export const SLOT_COUNT = 84;
@@ -115,6 +115,12 @@ export type Slot = {
   popT: number;
   /** Upward speed while a slapped pedestrian is flying. */
   flyY: number;
+  /** Slapped pedestrian converted to cardio: hops on the sidewalk instead of flying. */
+  dance: boolean;
+  /** Seconds since a flying pedestrian last bounced off the road (squash). */
+  bounceT: number;
+  /** Road bounces left for a flying pedestrian. */
+  bounces: number;
   /** Already damaged the player; ignore further contact. */
   hit: boolean;
   /** Index into the variant's render pool; -1 when unbound. */
@@ -136,6 +142,9 @@ export function createSlots(count = SLOT_COUNT): Slot[] {
     seed: 0,
     popT: -1,
     flyY: 0,
+    dance: false,
+    bounceT: 99,
+    bounces: 0,
     hit: false,
     inst: -1,
   }));
@@ -175,6 +184,9 @@ function place(
   slot.seed = Math.random();
   slot.popT = -1;
   slot.flyY = 0;
+  slot.dance = false;
+  slot.bounceT = 99;
+  slot.bounces = 0;
   slot.hit = false;
   const body = BODIES[variant];
   patternTail = Math.min(patternTail, z - (body ? body.length / 2 : 0));

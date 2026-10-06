@@ -6,7 +6,7 @@ import { quality } from './quality';
 
 const MAX_PARTICLES = 280;
 
-export type BurstKind = 'spark' | 'coin' | 'healthy' | 'protein' | 'hit' | 'roof' | 'dust' | 'smash' | 'power' | 'confetti';
+export type BurstKind = 'spark' | 'coin' | 'healthy' | 'protein' | 'hit' | 'roof' | 'dust' | 'smash' | 'power' | 'confetti' | 'burp' | 'stars';
 
 export type VfxFrame = {
   dt: number;
@@ -37,6 +37,9 @@ const BURSTS: Record<BurstKind, Burst> = {
   dust: { count: 12, color: [[0.6, 0.55, 0.5]], speed: 2, up: 1.2, life: 0.55, gravity: -1 },
   smash: { count: 26, color: [[1.6, 1.1, 0.2], [1.4, 0.35, 0.3]], speed: 6, up: 4, life: 0.55, gravity: -14 },
   power: { count: 40, color: [[1.8, 1.4, 0.3], [1.8, 1.8, 1.2]], speed: 6, up: 3, life: 0.8, gravity: -2 },
+  burp: { count: 24, color: [[0.55, 1.2, 0.2], [0.9, 1.3, 0.3]], speed: 1.6, up: 2.4, life: 0.9, gravity: 1.5 },
+  // Cartoon "seeing stars" ring above the runner's head.
+  stars: { count: 16, color: [[1.8, 1.6, 0.4], [1.8, 1.8, 1.8]], speed: 2.2, up: 0.8, life: 0.75, gravity: -1 },
   confetti: { count: 60, color: [[1.6, 0.3, 0.6], [0.3, 1.4, 1.6], [1.6, 1.3, 0.2], [0.5, 1.5, 0.4]], speed: 7, up: 7, life: 1.3, gravity: -9 },
 };
 

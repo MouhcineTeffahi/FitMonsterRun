@@ -19,7 +19,7 @@ import {
   type RunStats,
 } from '../game/RunnerScene';
 import { clampLane } from '../game/sim/patterns';
-import { BASE_SPEED, LEVEL_BONUS_COINS, levelGoalFor } from '../game/sim/runSim';
+import { BASE_SPEED, LEVEL_BONUS_COINS, SLAP_COINS, levelGoalFor } from '../game/sim/runSim';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
 import { HUD, type MissionView } from '../ui/HUD';
@@ -57,15 +57,27 @@ type Toast = { text: string; color: string };
 const TOASTS: Partial<Record<PickupEvent, Toast>> = {
   healthy: { text: 'HEALTHY! +ENERGY', color: colors.green },
   protein: { text: 'PROTEIN! 💪', color: colors.protein },
-  hit: { text: 'JUNK FOOD!', color: colors.red },
   roof: { text: 'ON THE TRUCK!', color: colors.yellow },
   platform: { text: 'PLATFORM!', color: '#00E5FF' },
-  power: { text: 'POWER MODE! ⚡', color: colors.power },
   smash: { text: 'SMASH!', color: '#FF7A45' },
-  slap: { text: 'GO TRAIN!', color: '#FF8A3D' },
-  kick: { text: 'GO TRAIN!', color: '#FF8A3D' },
   lowEnergy: { text: 'LOW ENERGY!', color: colors.red },
 };
+
+/** Events with several silly lines; one is picked at random each time. */
+const FUNNY: Partial<Record<PickupEvent, { lines: string[]; color: string }>> = {
+  slap: { lines: [`PAF! GO TRAIN! +${SLAP_COINS}🪙`, `WAKE UP & LIFT! +${SLAP_COINS}🪙`, `NO MORE COUCH! +${SLAP_COINS}🪙`], color: '#FF8A3D' },
+  kick: { lines: [`YEET! 🦵 +${SLAP_COINS}🪙`, `LEG DAY! +${SLAP_COINS}🪙`, `CARDIO TIME! +${SLAP_COINS}🪙`], color: '#FF8A3D' },
+  convert: { lines: ['CONVERTED! JOGGING BUDDY 🏃', 'NEW GYM BRO! 🏃', 'HE LIKES CARDIO NOW! 🏃'], color: colors.green },
+  burp: { lines: ['BURP! 🤢', 'CHEAT DAY?!', 'SO MUCH GREASE!'], color: colors.red },
+  bonk: { lines: ['BONK! 💫', 'OUCH, MY GAINS!', 'WHO PUT THAT THERE?!'], color: colors.red },
+  power: { lines: ['POWER MODE! ⚡', 'BEAST MODE! 🦍', 'GAINS UNLOCKED! 💪'], color: colors.power },
+};
+
+function toastFor(event: PickupEvent): Toast | undefined {
+  const funny = FUNNY[event];
+  if (funny) return { text: funny.lines[Math.floor(Math.random() * funny.lines.length)], color: funny.color };
+  return TOASTS[event];
+}
 
 const HINT_TIME_MS = 7000;
 
@@ -263,7 +275,7 @@ export function GameScreen({ onGameOver }: Props) {
           withTiming(0, { duration: 320 }),
         );
       }
-      const t = TOASTS[event];
+      const t = toastFor(event);
       if (t) showToast(t);
     },
     [flash, flashColor, showToast],
@@ -361,7 +373,7 @@ export function GameScreen({ onGameOver }: Props) {
       {hint && ready && !levelDone && intro === null ? (
         <View style={styles.hint} pointerEvents="none">
           <Text style={styles.hintText}>
-            Punch them: go train! · Slide to kick
+            Slap couch potatoes: +{SLAP_COINS} coins! · Slide to kick
           </Text>
         </View>
       ) : null}

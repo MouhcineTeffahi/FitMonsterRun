@@ -15,8 +15,8 @@ const MODULES = {
   protein: require('../assets/models/protein.glb'),
   /** Free Poly Pizza protein tub (Zsky, CC-BY). */
   proteinTub: require('../assets/models/protein-tub.glb'),
-  /** Free OpenGameArt "Fatty" by Drummyfish (CC0). */
-  fatGuy: require('../assets/models/fat-guy.glb'),
+  /** Kenney Mini Characters (CC0), packed by scripts/build-pedestrians.mjs. */
+  pedestrians: require('../assets/models/pedestrians.glb'),
 } as const;
 
 export type ModelKey = keyof typeof MODULES;

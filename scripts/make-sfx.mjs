@@ -82,4 +82,23 @@ wav('level', notes(1.3, [
   [784, 0.5, 0.75, 'tri', 0.6], [659, 0.5, 0.75, 'tri', 0.5],
 ]), 0.5);
 wav('smash', render(0.25, (t) => (noise() * 0.8 + Math.sin(TAU * 600 * t) * 0.3) * Math.exp(-t * 16)), 0.5);
+// Cartoon slap: sharp noise crack followed by a quick downward wobble.
+wav('slap', render(0.34, (t) => {
+  const crack = noise() * Math.exp(-t * 70);
+  const wob = Math.sin(TAU * (520 - 700 * t) * t + 6 * Math.sin(TAU * 18 * t)) * Math.exp(-t * 9) * Math.min(1, t / 0.02);
+  return crack * 0.9 + wob * 0.5;
+}), 0.6);
+// Spring "boing" for bonking into trucks and signs.
+wav('boing', render(0.5, (t) => {
+  const f = 180 + 140 * Math.exp(-t * 6) * Math.sin(TAU * 11 * t);
+  return Math.sin(TAU * f * t) * Math.exp(-t * 5) * Math.min(1, t / 0.004);
+}), 0.55);
+// Low, gurgly burp for eating junk food.
+let bp = 0;
+wav('burp', render(0.45, (t) => {
+  bp += (noise() - bp) * 0.15;
+  const f = 85 + 25 * Math.sin(TAU * 7 * t) - 30 * t;
+  const voice = sq(TAU * f * t) * (0.6 + 0.4 * Math.sin(TAU * 31 * t));
+  return (voice * 0.7 + bp * 0.5) * Math.sin(Math.PI * Math.min(1, t / 0.45)) ** 0.6;
+}), 0.55);
 console.log('wrote sounds to', out);

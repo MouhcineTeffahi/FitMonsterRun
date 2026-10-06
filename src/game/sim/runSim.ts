@@ -62,6 +62,11 @@ export type RunEvent =
   | 'smash'
   | 'slap'
   | 'kick'
+  /** A slapped pedestrian starts doing cardio on the sidewalk. */
+  | 'convert'
+  /** Hit flavour, emitted right after 'hit': junk food vs. trucks/signs. */
+  | 'burp'
+  | 'bonk'
   | 'level'
   | 'combo'
   | 'lowEnergy'
@@ -128,6 +133,14 @@ const BODY_REACH = 1.05;
 const SMALL_REACH = 0.95;
 export const POWER_TIME = 8;
 export const POWER_CHARGE = 3;
+/** Coins paid for every slapped or kicked pedestrian. */
+export const SLAP_COINS = 2;
+const DANCE_CHANCE = 0.35;
+const DANCE_HOP = 7;
+/** Sidewalk line converted pedestrians jog along. */
+const DANCE_X = 3.7;
+/** Fraction of the run speed a converted jogging buddy keeps up with. */
+const BUDDY_PACE = 0.86;
 export const LEVEL_BONUS_COINS = 250;
 /** Pickup chain stays alive this long between collects. */
 const COMBO_WINDOW = 1.8;
@@ -234,7 +247,7 @@ function supportHeight(slots: Slot[], s: RunState): number {
   return ground;
 }
 
-function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) => void) {
+function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) => void, flavour: 'burp' | 'bonk') {
   s.stats.energy -= damage;
   s.stats.combo = 0;
   s.comboT = 0;
@@ -242,6 +255,7 @@ function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) =>
   s.shake = shake;
   s.hitT = 0;
   emit('hit');
+  emit(flavour);
 }
 
 /**
@@ -296,11 +310,28 @@ export function stepRun(
     }
     if (slot.popT >= 0) {
       slot.popT += dt;
-      if (slot.kind === 'slap') {
+      if (slot.kind === 'slap' && slot.dance) {
+        // Celebration hop, then jogs beside the runner on the sidewalk and
+        // slowly drops back past the camera.
+        if (Math.abs(slot.x) < DANCE_X) slot.x += slot.phase * dt;
+        slot.vz = -s.speed * BUDDY_PACE;
+        slot.flyY -= 30 * dt;
+        slot.y = Math.max(0, slot.y + slot.flyY * dt);
+        if (slot.z > DESPAWN_Z || slot.popT > 9) slot.active = false;
+      } else if (slot.kind === 'slap') {
         slot.x += slot.phase * dt;
         slot.flyY -= 28 * dt;
         slot.y += slot.flyY * dt;
-        if (slot.popT > 1.45 || slot.y < -4) slot.active = false;
+        slot.bounceT += dt;
+        if (slot.y < 0 && slot.flyY < 0 && slot.bounces > 0) {
+          // Cartoon bounce off the asphalt.
+          slot.y = 0;
+          slot.flyY *= -0.5;
+          slot.phase *= 0.7;
+          slot.bounces -= 1;
+          slot.bounceT = 0;
+        }
+        if (slot.popT > 1.6 || slot.y < -4) slot.active = false;
       } else {
         slot.y += dt * 5;
         if (slot.popT > 0.28) slot.active = false;
@@ -398,7 +429,7 @@ export function stepRun(
       }
       if (s.invuln > 0) continue;
       slot.hit = true;
-      hurt(s, body.damage, 0.5, emit);
+      hurt(s, body.damage, 0.5, emit, 'bonk');
     } else if (slot.kind === 'barrier') {
       if (Math.abs(dzp) > 0.8 || !overlaps(s, slot, SMALL_REACH)) continue;
       if (s.y >= BARRIER_HEIGHT) continue;
@@ -414,13 +445,13 @@ export function stepRun(
       }
       if (s.invuln > 0) continue;
       slot.active = false;
-      hurt(s, 20, 0.4, emit);
+      hurt(s, 20, 0.4, emit, 'burp');
     } else if (slot.kind === 'overhead') {
       if (slot.hit || Math.abs(dzp) > 0.6 || !overlaps(s, slot, SMALL_REACH)) continue;
       const top = s.y + height;
       if (top <= OVERHEAD_BOTTOM || s.y >= OVERHEAD_TOP || s.invuln > 0) continue;
       slot.hit = true;
-      hurt(s, 25, 0.5, emit);
+      hurt(s, 25, 0.5, emit, 'bonk');
     } else if (slot.kind === 'slap') {
       if (slot.hit || Math.abs(dzp) > 0.75 || !overlaps(s, slot, SMALL_REACH)) continue;
       if (s.y > 1.15) continue;
@@ -428,16 +459,28 @@ export function stepRun(
       slot.hit = true;
       const kick = s.slideT > 0 || s.airborne;
       const side = slot.x >= s.x ? 1 : -1;
-      // phase = sideways speed, vz = down the street, flyY = launch.
-      slot.phase = side * (kick ? 8 : 14);
-      slot.vz = kick ? -52 : -34;
-      slot.flyY = kick ? 10 : 18;
+      // Some slapped couch potatoes get the message and start cardio.
+      slot.dance = !kick && (slot.seed * 7.31) % 1 < DANCE_CHANCE;
+      if (slot.dance) {
+        slot.phase = (slot.x === 0 ? side : Math.sign(slot.x)) * 6;
+        slot.vz = 0;
+        slot.flyY = DANCE_HOP;
+      } else {
+        // phase = sideways speed, vz = down the street, flyY = launch.
+        slot.phase = side * (kick ? 8 : 14);
+        slot.vz = kick ? -52 : -34;
+        slot.flyY = kick ? 10 : 18;
+        slot.bounces = 2;
+        slot.bounceT = 99;
+      }
+      st.coins += SLAP_COINS;
       s.attack = kick ? 2 : 1;
       s.attackSide = slot.x >= s.x ? 1 : -1;
       s.attackT = 0;
       bumpCombo(s, emit);
       st.score += (45 + comboBonus(st.combo)) * mult;
       emit(kick ? 'kick' : 'slap');
+      if (slot.dance) emit('convert');
     } else if ((slot.kind === 'coin' || slot.kind === 'healthy') && aligned && slot.lane === lane) {
       if (Math.abs(dzp) > 0.85) continue;
       const reachY = s.slideT > 0 ? s.y + 0.4 : s.y + 1.1;

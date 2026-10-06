@@ -13,6 +13,9 @@ const SOURCES = {
   power: require('../../assets/sounds/power.wav'),
   level: require('../../assets/sounds/level.wav'),
   smash: require('../../assets/sounds/smash.wav'),
+  slap: require('../../assets/sounds/slap.wav'),
+  boing: require('../../assets/sounds/boing.wav'),
+  burp: require('../../assets/sounds/burp.wav'),
 } as const;
 
 export type SfxName = keyof typeof SOURCES;
@@ -32,8 +35,11 @@ const EVENT_SFX: Partial<Record<RunEvent, SfxName>> = {
   power: 'power',
   level: 'level',
   smash: 'smash',
-  slap: 'smash',
-  kick: 'smash',
+  slap: 'slap',
+  kick: 'slap',
+  bonk: 'boing',
+  burp: 'burp',
+  convert: 'healthy',
   roof: 'land',
   platform: 'land',
 };
