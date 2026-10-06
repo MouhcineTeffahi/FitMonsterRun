@@ -59,6 +59,8 @@ const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
   space: 'confetti',
   burp: 'burp',
   bonk: 'stars',
+  nearMiss: 'nearMiss',
+  combo: 'coin',
 };
 
 const BURST_Y: Partial<Record<RunEvent, number>> = { coin: 1.1, level: 2.5, convert: 1.2, space: 2.5, burp: 1.4, bonk: 1.9 };
@@ -152,8 +154,10 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
       const s = run.current;
       const burst = BURST_FOR[event];
       if (burst) vfx.current?.burst(burst, s.x, s.y + (BURST_Y[event] ?? 0.15), PLAYER_Z - 0.2);
-      if (event === 'speedup' || event === 'power') fovPunch.current = 10;
+      if (event === 'speedup' || event === 'power' || event === 'combo') fovPunch.current = 10;
+      if (event === 'nearMiss') fovPunch.current = Math.max(fovPunch.current, 6);
       if (event === 'hit') s.shake = Math.max(s.shake, 0.55);
+      if (event === 'nearMiss') s.shake = Math.max(s.shake, 0.22);
       playEventSfx(event);
       onEvent(event);
     },
@@ -293,24 +297,32 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
       });
     }
 
-    // Camera: lerped follow behind/above, look-ahead, soft lane lean, slide
-    // crouch, hit shake and a speed-driven FOV with a punch on speed-ups.
-    const shake = s.shake * 1.6;
+    // Camera: snappier chase cam with look-ahead, lane lean, slide crouch,
+    // hit / near-miss shake, and a speed-driven FOV with punches on juice events.
+    const shake = s.shake * 1.85;
     const shakeX = shake > 0 ? (Math.random() - 0.5) * shake : 0;
-    const shakeY = shake > 0 ? (Math.random() - 0.5) * shake * 0.7 : 0;
-    camera.position.x += (s.x * 0.55 - camera.position.x) * Math.min(1, dt * 5) + shakeX;
-    const camY = 4.5 + s.y * 0.75 - (sliding ? 0.55 : 0);
-    camera.position.y += (camY - camera.position.y) * Math.min(1, dt * 6) + shakeY;
-    camera.position.z += ((s.dead ? 9.5 : 7.8) - camera.position.z) * Math.min(1, dt * 3);
-    const ahead = 10 + (s.speed - BASE_SPEED) * 0.2;
-    scratch.look.set(s.x * 0.4, 1.4 + s.y * 0.7, -ahead);
+    const shakeY = shake > 0 ? (Math.random() - 0.5) * shake * 0.75 : 0;
+    const laneTarget = LANE_X[c.lane as 0 | 1 | 2];
+    const followX = s.x * 0.62 + (laneTarget - s.x) * 0.12;
+    camera.position.x += (followX - camera.position.x) * Math.min(1, dt * 6.5) + shakeX;
+    const camY = 4.35 + s.y * 0.82 - (sliding ? 0.62 : 0) + (s.stats.power > 0 ? 0.15 : 0);
+    camera.position.y += (camY - camera.position.y) * Math.min(1, dt * 7) + shakeY;
+    const camZ = s.dead ? 9.8 : 7.55 - Math.min(0.55, (s.speed - BASE_SPEED) * 0.025);
+    camera.position.z += (camZ - camera.position.z) * Math.min(1, dt * 3.4);
+    const ahead = 10.5 + (s.speed - BASE_SPEED) * 0.28;
+    scratch.look.set(s.x * 0.48 + laneTarget * 0.08, 1.35 + s.y * 0.75, -ahead);
     camera.lookAt(scratch.look);
-    camera.rotateZ((LANE_X[c.lane as 0 | 1 | 2] - s.x) * 0.025);
+    camera.rotateZ((laneTarget - s.x) * 0.032 + s.vx * -0.004);
     fovPunch.current = Math.max(0, fovPunch.current - dt * 14);
     const persp = camera as THREE.PerspectiveCamera;
-    const fov = BASE_FOV + (s.speed - BASE_SPEED) * 0.35 + fovPunch.current + (s.stats.power > 0 ? 4 : 0);
+    const fov =
+      BASE_FOV +
+      (s.speed - BASE_SPEED) * 0.42 +
+      fovPunch.current +
+      (s.stats.power > 0 ? 5 : 0) +
+      (s.stats.combo >= 8 ? 2 : 0);
     if (Math.abs(persp.fov - fov) > 0.01) {
-      persp.fov += (fov - persp.fov) * Math.min(1, dt * 6);
+      persp.fov += (fov - persp.fov) * Math.min(1, dt * 7);
       persp.updateProjectionMatrix();
     }
 

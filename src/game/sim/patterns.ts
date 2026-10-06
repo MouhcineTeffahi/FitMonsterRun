@@ -123,6 +123,8 @@ export type Slot = {
   bounces: number;
   /** Already damaged the player; ignore further contact. */
   hit: boolean;
+  /** Near-miss coin already paid for this obstacle. */
+  nearMissed: boolean;
   /** Index into the variant's render pool; -1 when unbound. */
   inst: number;
 };
@@ -146,6 +148,7 @@ export function createSlots(count = SLOT_COUNT): Slot[] {
     bounceT: 99,
     bounces: 0,
     hit: false,
+    nearMissed: false,
     inst: -1,
   }));
 }
@@ -188,6 +191,7 @@ function place(
   slot.bounceT = 99;
   slot.bounces = 0;
   slot.hit = false;
+  slot.nearMissed = false;
   const body = BODIES[variant];
   patternTail = Math.min(patternTail, z - (body ? body.length / 2 : 0));
   return slot;

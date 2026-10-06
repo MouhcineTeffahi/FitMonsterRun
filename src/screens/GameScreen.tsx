@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { MISSIONS, type ChallengeStat } from '../data/challenges';
+import { paintedSkin } from '../data/playerColors';
 import { getSkin } from '../data/skins';
 import { getSpace } from '../data/spaces';
 import { colors, MAX_ENERGY } from '../data/theme';
@@ -20,7 +21,7 @@ import {
   type RunStats,
 } from '../game/RunnerScene';
 import { clampLane } from '../game/sim/patterns';
-import { BASE_SPEED, LEVEL_BONUS_COINS, SLAP_COINS, SPACE_BONUS, levelGoalFor } from '../game/sim/runSim';
+import { BASE_SPEED, LEVEL_BONUS_COINS, NEAR_MISS_COINS, SLAP_COINS, SPACE_BONUS, levelGoalFor } from '../game/sim/runSim';
 import { BIOME_NAME, setBiomeOrder, type Biome } from '../game/world/biomes';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
@@ -52,6 +53,7 @@ const INITIAL_STATS: RunStats = {
   junkDodged: 0,
   combo: 0,
   bestCombo: 0,
+  nearMisses: 0,
 };
 
 type Toast = { text: string; color: string };
@@ -73,6 +75,14 @@ const FUNNY: Partial<Record<PickupEvent, { lines: string[]; color: string }>> = 
   burp: { lines: ['BURP! 🤢', 'CHEAT DAY?!', 'SO MUCH GREASE!'], color: colors.red },
   bonk: { lines: ['BONK! 💫', 'OUCH, MY GAINS!', 'WHO PUT THAT THERE?!'], color: colors.red },
   power: { lines: ['POWER MODE! ⚡', 'BEAST MODE! 🦍', 'GAINS UNLOCKED! 💪'], color: colors.power },
+  nearMiss: {
+    lines: [
+      `CLOSE CALL! +${NEAR_MISS_COINS}🪙`,
+      `TOO CLOSE! +${NEAR_MISS_COINS}🪙`,
+      `NINJA DODGE! +${NEAR_MISS_COINS}🪙`,
+    ],
+    color: '#7CFF6B',
+  },
 };
 
 function toastFor(event: PickupEvent): Toast | undefined {
@@ -89,12 +99,16 @@ function statValue(stats: RunStats, stat: ChallengeStat): number {
 
 export function GameScreen({ onGameOver }: Props) {
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
+  const playerColors = useProgressStore((s) => s.playerColors);
   const applyRunTick = useProgressStore((s) => s.applyRunTick);
   const finishRun = useProgressStore((s) => s.finishRun);
   const addCoins = useProgressStore((s) => s.addCoins);
   const resetRun = useProgressStore((s) => s.resetRun);
   const recordRun = useProgressStore((s) => s.recordRun);
-  const skin = useMemo(() => getSkin(selectedSkin), [selectedSkin]);
+  const skin = useMemo(
+    () => paintedSkin(getSkin(selectedSkin), playerColors),
+    [selectedSkin, playerColors],
+  );
 
   const selectedSpace = useProgressStore((s) => s.selectedSpace);
   // The world reads the rotation while mounting, so set it before the first render of the scene.
@@ -273,7 +287,19 @@ export function GameScreen({ onGameOver }: Props) {
       }
       if (event === 'combo') {
         showToast({ text: `COMBO x${statsRef.current.combo} !`, color: colors.yellowBright });
+        flashColor.value = 1;
+        flash.value = withSequence(
+          withTiming(0.28, { duration: 50 }),
+          withTiming(0, { duration: 280 }),
+        );
         return;
+      }
+      if (event === 'nearMiss') {
+        flashColor.value = 1;
+        flash.value = withSequence(
+          withTiming(0.18, { duration: 40 }),
+          withTiming(0, { duration: 220 }),
+        );
       }
       if (event === 'hit' || event === 'power') {
         flashColor.value = event === 'hit' ? 0 : 1;
@@ -371,7 +397,7 @@ export function GameScreen({ onGameOver }: Props) {
       </GestureDetector>
 
       {!postFx ? <Vignette /> : null}
-      <SpeedLines speed={stats.speed} />
+      <SpeedLines speed={stats.speed} combo={stats.combo} />
       <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
 
       {toast && !levelDone ? (

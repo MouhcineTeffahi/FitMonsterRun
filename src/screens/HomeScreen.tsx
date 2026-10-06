@@ -1,9 +1,18 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { DAILY_CHALLENGES, todayKey } from '../data/challenges';
+import { paintedSkin } from '../data/playerColors';
 import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
+import { nextUnlockTeaser } from '../data/unlockTeasers';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
 import { DumbbellMark } from '../ui/DumbbellMark';
@@ -11,23 +20,35 @@ import { display } from '../ui/fonts';
 import { Logo } from '../ui/Logo';
 import { MenuBackdrop } from '../ui/MenuBackdrop';
 import { SpacePicker } from '../ui/SpacePicker';
+import { UnlockTeaserCard } from '../ui/UnlockTeaserCard';
 import { ui } from '../utils/styles';
 
 type Props = {
   onPlay: () => void;
   onShop: () => void;
+  onCustomize: () => void;
   onChallenges: () => void;
   onLeaderboard: () => void;
 };
 
-export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Props) {
+export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeaderboard }: Props) {
   const bestScore = useProgressStore((s) => s.bestScore);
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
+  const playerColors = useProgressStore((s) => s.playerColors);
+  const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
+  const unlockedSpaces = useProgressStore((s) => s.unlockedSpaces);
   const soundEnabled = useProgressStore((s) => s.soundEnabled);
   const toggleSound = useProgressStore((s) => s.toggleSound);
   const daily = useProgressStore((s) => s.daily);
-  const skin = getSkin(selectedSkin);
+  const skin = useMemo(
+    () => paintedSkin(getSkin(selectedSkin), playerColors),
+    [selectedSkin, playerColors],
+  );
+  const teaser = useMemo(
+    () => nextUnlockTeaser(totalCoins, unlockedSkins, unlockedSpaces),
+    [totalCoins, unlockedSkins, unlockedSpaces],
+  );
 
   const today = daily.date === todayKey() ? daily : null;
   const claimable = today
@@ -36,9 +57,23 @@ export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Prop
       ).length
     : 0;
 
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1.08, { duration: 1600, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, [pulse]);
+  const glowStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    opacity: 0.35 + (pulse.value - 1) * 2,
+  }));
+
   return (
     <View style={ui.screen}>
       <MenuBackdrop />
+      <Animated.View style={[styles.heroGlow, glowStyle, { backgroundColor: playerColors.body }]} />
       <MonsterShowcase skin={skin} mode="hero" floor={false} style={styles.hero} />
       <SafeAreaView style={styles.safe}>
         <View style={styles.topBar}>
@@ -67,15 +102,19 @@ export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Prop
 
         <View style={styles.menu}>
           <Text style={styles.best}>BEST SCORE: {bestScore}</Text>
+          {teaser ? <UnlockTeaserCard teaser={teaser} compact /> : null}
           <SpacePicker />
           <Pressable style={[ui.primaryBtn, styles.playBtn]} onPress={onPlay} accessibilityRole="button">
             <Text style={[ui.primaryBtnText, styles.playText]}>PLAY</Text>
           </Pressable>
           <View style={styles.row}>
             <MenuButton label="SHOP" onPress={onShop} />
-            <MenuButton label="CHALLENGES" onPress={onChallenges} badge={claimable} />
+            <MenuButton label="COLORS" onPress={onCustomize} />
           </View>
-          <MenuButton label="🏆  LEADERBOARD" onPress={onLeaderboard} />
+          <View style={styles.row}>
+            <MenuButton label="CHALLENGES" onPress={onChallenges} badge={claimable} />
+            <MenuButton label="🏆  RANKS" onPress={onLeaderboard} />
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -101,6 +140,14 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  heroGlow: {
+    position: 'absolute',
+    right: '-8%',
+    top: '22%',
+    width: '62%',
+    height: '42%',
+    borderRadius: 999,
   },
   hero: {
     position: 'absolute',

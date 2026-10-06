@@ -7,6 +7,7 @@ import type { RunSummary, ScreenId } from './src/data/types';
 import { colors } from './src/data/theme';
 import { preloadSfx, setSfxEnabled } from './src/game/audio/sfx';
 import { ChallengesScreen } from './src/screens/ChallengesScreen';
+import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { GameOverScreen } from './src/screens/GameOverScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -17,6 +18,7 @@ import { useAppFonts } from './src/ui/fonts';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>('home');
+  const [customizeBack, setCustomizeBack] = useState<ScreenId>('home');
   const [summary, setSummary] = useState<RunSummary>({
     coins: 0,
     distance: 0,
@@ -54,6 +56,10 @@ export default function App() {
     setScreen('game');
   };
   const home = () => setScreen('home');
+  const openCustomize = (from: 'home' | 'shop') => {
+    setCustomizeBack(from);
+    setScreen('customize');
+  };
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -62,6 +68,7 @@ export default function App() {
         <HomeScreen
           onPlay={startRun}
           onShop={() => setScreen('shop')}
+          onCustomize={() => openCustomize('home')}
           onChallenges={() => setScreen('challenges')}
           onLeaderboard={() => setScreen('leaderboard')}
         />
@@ -77,7 +84,12 @@ export default function App() {
       {screen === 'gameOver' ? (
         <GameOverScreen summary={summary} onRestart={startRun} onHome={home} />
       ) : null}
-      {screen === 'shop' ? <ShopScreen onBack={home} /> : null}
+      {screen === 'shop' ? (
+        <ShopScreen onBack={home} onCustomize={() => openCustomize('shop')} />
+      ) : null}
+      {screen === 'customize' ? (
+        <CustomizeScreen onBack={() => setScreen(customizeBack)} />
+      ) : null}
       {screen === 'challenges' ? <ChallengesScreen onBack={home} /> : null}
       {screen === 'leaderboard' ? <LeaderboardScreen onBack={home} /> : null}
     </GestureHandlerRootView>

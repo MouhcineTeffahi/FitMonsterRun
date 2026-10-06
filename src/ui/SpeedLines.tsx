@@ -21,16 +21,18 @@ const LINES = Array.from({ length: 14 }, (_, i) => {
   };
 });
 
-type Props = { speed: number };
+type Props = { speed: number; combo?: number };
 
 /** Comic speed streaks around the screen edge; stronger as the run speeds up. */
-export function SpeedLines({ speed }: Props) {
+export function SpeedLines({ speed, combo = 0 }: Props) {
   const t = useSharedValue(0);
   useEffect(() => {
     t.value = withRepeat(withTiming(1, { duration: 420, easing: Easing.linear }), -1, false);
   }, [t]);
 
-  const intensity = Math.min(1, Math.max(0, (speed - BASE_SPEED * 0.95) / (BASE_SPEED * 0.9)));
+  const speedIntensity = Math.min(1, Math.max(0, (speed - BASE_SPEED * 0.95) / (BASE_SPEED * 0.9)));
+  const comboBoost = Math.min(0.35, Math.max(0, (combo - 3) * 0.04));
+  const intensity = Math.min(1, speedIntensity + comboBoost);
   if (intensity <= 0.02) return null;
 
   return (

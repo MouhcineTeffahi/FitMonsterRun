@@ -6,7 +6,7 @@ import { quality } from './quality';
 
 const MAX_PARTICLES = 280;
 
-export type BurstKind = 'spark' | 'coin' | 'healthy' | 'protein' | 'hit' | 'roof' | 'dust' | 'smash' | 'power' | 'confetti' | 'burp' | 'stars';
+export type BurstKind = 'spark' | 'coin' | 'healthy' | 'protein' | 'hit' | 'roof' | 'dust' | 'smash' | 'power' | 'confetti' | 'burp' | 'stars' | 'nearMiss';
 
 export type VfxFrame = {
   dt: number;
@@ -41,6 +41,8 @@ const BURSTS: Record<BurstKind, Burst> = {
   // Cartoon "seeing stars" ring above the runner's head.
   stars: { count: 16, color: [[1.8, 1.6, 0.4], [1.8, 1.8, 1.8]], speed: 2.2, up: 0.8, life: 0.75, gravity: -1 },
   confetti: { count: 60, color: [[1.6, 0.3, 0.6], [0.3, 1.4, 1.6], [1.6, 1.3, 0.2], [0.5, 1.5, 0.4]], speed: 7, up: 7, life: 1.3, gravity: -9 },
+  // Whoosh of a close call.
+  nearMiss: { count: 18, color: [[1.8, 1.6, 0.5], [1.4, 1.8, 1.8]], speed: 5.5, up: 1.5, life: 0.4, gravity: -2 },
 };
 
 /** Pooled additive point particles; all work happens in `update` (called from useFrame). */

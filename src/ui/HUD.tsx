@@ -217,11 +217,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: '#FFF6B0',
   },
   comboText: {
     ...display,
     color: colors.black,
-    fontSize: 13,
+    fontSize: 14,
   },
   levelRow: {
     marginTop: 10,

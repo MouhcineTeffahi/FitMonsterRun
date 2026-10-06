@@ -44,6 +44,8 @@ export type RunStats = {
   /** Pickups in a row. Resets on a hit or after a short gap. */
   combo: number;
   bestCombo: number;
+  /** Close calls rewarded this run. */
+  nearMisses: number;
 };
 
 /** Gameplay feedback; some drive toasts, the rest drive VFX/camera/audio. */
@@ -70,6 +72,7 @@ export type RunEvent =
   | 'bonk'
   | 'level'
   | 'combo'
+  | 'nearMiss'
   | 'lowEnergy'
   | 'death';
 
@@ -197,6 +200,7 @@ export function createRunState(): RunState {
       junkDodged: 0,
       combo: 0,
       bestCombo: 0,
+      nearMisses: 0,
     },
   };
 }
@@ -206,12 +210,37 @@ function bumpCombo(s: RunState, emit: (e: RunEvent) => void) {
   st.combo += 1;
   s.comboT = COMBO_WINDOW;
   if (st.combo > st.bestCombo) st.bestCombo = st.combo;
-  if (st.combo >= 5 && st.combo % 5 === 0) emit('combo');
+  if (st.combo >= 5 && st.combo % 5 === 0) {
+    // Milestone juice: free coins scale with the chain.
+    const bonus = Math.min(12, 2 + Math.floor(st.combo / 5));
+    st.coins += bonus;
+    st.score += bonus * 8 * st.multiplier;
+    emit('combo');
+  }
 }
 
 /** Extra score once a chain is rolling. */
 function comboBonus(combo: number): number {
   return combo >= 3 ? combo : 0;
+}
+
+/** Coins paid for a stylish near miss. */
+export const NEAR_MISS_COINS = 3;
+const NEAR_MISS_LATERAL = 2.85;
+const NEAR_MISS_SCORE = 35;
+
+function tryNearMiss(s: RunState, slot: Slot, emit: (e: RunEvent) => void) {
+  if (slot.nearMissed || slot.hit || s.dead || s.invuln > 0) return;
+  const lateral = Math.abs(s.x - slot.x);
+  if (lateral < 0.85 || lateral > NEAR_MISS_LATERAL) return;
+  slot.nearMissed = true;
+  const st = s.stats;
+  st.nearMisses += 1;
+  st.coins += NEAR_MISS_COINS;
+  bumpCombo(s, emit);
+  st.score += (NEAR_MISS_SCORE + comboBonus(st.combo)) * st.multiplier * (st.power > 0 ? 2 : 1);
+  s.shake = Math.max(s.shake, 0.18);
+  emit('nearMiss');
 }
 
 const overlaps = (s: RunState, slot: Slot, reach: number) => Math.abs(s.x - slot.x) < reach;
@@ -306,6 +335,7 @@ export function stepRun(
 
   for (const slot of slots) {
     if (!slot.active) continue;
+    const prevZ = slot.z;
     slot.z += dz + slot.vz * dt;
     if (slot.sway) {
       slot.phase += dt * 1.7;
@@ -340,6 +370,16 @@ export function stepRun(
         if (slot.popT > 0.28) slot.active = false;
       }
       continue;
+    }
+    // Stylish near-miss: hazard just slipped past in a neighbouring lane.
+    if (
+      !slot.nearMissed &&
+      !slot.hit &&
+      prevZ < PLAYER_Z &&
+      slot.z >= PLAYER_Z &&
+      (slot.kind === 'truck' || slot.kind === 'barrier' || slot.kind === 'overhead' || slot.kind === 'slap')
+    ) {
+      tryNearMiss(s, slot, emit);
     }
     const body = BODIES[slot.variant];
     const tail = body ? slot.z - body.length / 2 : slot.z;

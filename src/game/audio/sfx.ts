@@ -43,6 +43,8 @@ const EVENT_SFX: Partial<Record<RunEvent, SfxName>> = {
   space: 'level',
   roof: 'land',
   platform: 'land',
+  nearMiss: 'coin',
+  combo: 'protein',
 };
 
 type Pool = { players: AudioPlayer[]; next: number };

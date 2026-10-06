@@ -6,6 +6,12 @@ import {
   DEFAULT_UNLOCKED,
   type SkinId,
 } from '../data/skins';
+import {
+  DEFAULT_PLAYER_COLORS,
+  parsePlayerColors,
+  type ColorSlot,
+  type PlayerColors,
+} from '../data/playerColors';
 import { MAX_ENERGY } from '../data/theme';
 import { DAILY_CHALLENGES, todayKey, type ChallengeStat } from '../data/challenges';
 import { DEFAULT_SPACE, FREE_SPACES, getSpace, isSpaceId, type SpaceId } from '../data/spaces';
@@ -24,6 +30,8 @@ type PersistedSlice = {
   topScores: number[];
   selectedSpace: SpaceId;
   unlockedSpaces: SpaceId[];
+  /** Player paint channels over the selected skin. */
+  playerColors: PlayerColors;
 };
 
 export type DailyState = {
@@ -68,6 +76,8 @@ type ProgressState = PersistedSlice &
     claimChallenge: (id: string) => boolean;
     /** Selects the space, buying it first if needed; false if unaffordable. */
     chooseSpace: (id: SpaceId) => boolean;
+    setPlayerColor: (slot: ColorSlot, hex: string) => void;
+    resetPlayerColors: () => void;
   };
 
 function isSkinId(value: unknown): value is SkinId {
@@ -90,6 +100,7 @@ function persistedPayload(state: PersistedSlice): PersistedSlice {
     topScores: state.topScores,
     selectedSpace: state.selectedSpace,
     unlockedSpaces: state.unlockedSpaces,
+    playerColors: state.playerColors,
   };
 }
 
@@ -125,6 +136,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   topScores: [],
   selectedSpace: DEFAULT_SPACE,
   unlockedSpaces: [...FREE_SPACES],
+  playerColors: { ...DEFAULT_PLAYER_COLORS },
   currentEnergy: MAX_ENERGY,
   currentScore: 0,
   currentDistance: 0,
@@ -212,11 +224,24 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
           ? parsed.topScores.map(Number).filter(Number.isFinite).slice(0, 5)
           : [],
         ...parseSpaces(parsed),
+        playerColors: parsePlayerColors(parsed.playerColors),
         hydrated: true,
       });
     } catch {
       set({ hydrated: true });
     }
+  },
+
+  setPlayerColor: (slot, hex) => {
+    const next = hex.trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(next)) return;
+    set((s) => ({ playerColors: { ...s.playerColors, [slot]: next } }));
+    void get().saveProgress();
+  },
+
+  resetPlayerColors: () => {
+    set({ playerColors: { ...DEFAULT_PLAYER_COLORS } });
+    void get().saveProgress();
   },
 
   toggleSound: () => {

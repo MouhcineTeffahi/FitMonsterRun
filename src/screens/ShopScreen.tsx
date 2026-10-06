@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { paintedSkin } from '../data/playerColors';
 import { getSkin, SKINS, type SkinId } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
@@ -13,19 +14,24 @@ import { ui } from '../utils/styles';
 
 type Props = {
   onBack: () => void;
+  onCustomize: () => void;
 };
 
 /** BOUTIQUE / SKINS: live 3D preview on top, 2×2 grid of skin cards below. */
-export function ShopScreen({ onBack }: Props) {
+export function ShopScreen({ onBack, onCustomize }: Props) {
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
+  const playerColors = useProgressStore((s) => s.playerColors);
   const spendCoins = useProgressStore((s) => s.spendCoins);
   const unlockSkin = useProgressStore((s) => s.unlockSkin);
   const selectSkin = useProgressStore((s) => s.selectSkin);
 
   const [previewId, setPreviewId] = useState<SkinId>(selectedSkin);
-  const preview = getSkin(previewId);
+  const preview = useMemo(
+    () => paintedSkin(getSkin(previewId), playerColors),
+    [previewId, playerColors],
+  );
   const unlocked = unlockedSkins.includes(previewId);
   const selected = selectedSkin === previewId;
   const canAfford = totalCoins >= preview.price;
@@ -55,7 +61,7 @@ export function ShopScreen({ onBack }: Props) {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.stage}>
-          <View style={styles.stageGlow} />
+          <View style={[styles.stageGlow, { backgroundColor: `${playerColors.body}22` }]} />
           <MonsterShowcase skin={preview} style={styles.showcase} />
           <Text style={styles.stageName}>{preview.name.toUpperCase()}</Text>
         </View>
@@ -73,8 +79,13 @@ export function ShopScreen({ onBack }: Props) {
           <Text style={selected ? ui.secondaryBtnText : ui.primaryBtnText}>{actionLabel}</Text>
         </Pressable>
 
+        <Pressable style={styles.paintBtn} onPress={onCustomize} accessibilityRole="button">
+          <Text style={styles.paintText}>🎨  CUSTOMIZE COLORS</Text>
+        </Pressable>
+
         <View style={styles.grid}>
           {SKINS.map((skin) => {
+            const painted = paintedSkin(skin, playerColors);
             const owned = unlockedSkins.includes(skin.id);
             const isSelected = selectedSkin === skin.id;
             return (
@@ -90,7 +101,7 @@ export function ShopScreen({ onBack }: Props) {
                 accessibilityLabel={skin.name}
               >
                 <View style={styles.cardArt}>
-                  <MonsterPreview skin={skin} size={118} />
+                  <MonsterPreview skin={painted} size={118} />
                 </View>
                 <Text style={styles.cardName} numberOfLines={1}>
                   {skin.name.replace(' Mode', '').replace(' Yellow', '').toUpperCase()}
@@ -140,7 +151,6 @@ const styles = StyleSheet.create({
     top: '18%',
     bottom: '6%',
     borderRadius: 999,
-    backgroundColor: 'rgba(252,178,2,0.12)',
   },
   showcase: {
     ...StyleSheet.absoluteFill,
@@ -155,6 +165,20 @@ const styles = StyleSheet.create({
   },
   action: {
     minHeight: 52,
+  },
+  paintBtn: {
+    minHeight: 48,
+    borderRadius: radii.md,
+    backgroundColor: colors.panelElevated,
+    borderWidth: 2,
+    borderColor: colors.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paintText: {
+    ...display,
+    color: colors.yellow,
+    fontSize: 16,
   },
   disabled: {
     opacity: 0.5,

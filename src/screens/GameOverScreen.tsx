@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, spacing } from '../data/theme';
 import type { RunSummary } from '../data/types';
+import { nextUnlockTeaser } from '../data/unlockTeasers';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
+import { UnlockTeaserCard } from '../ui/UnlockTeaserCard';
 import { ui } from '../utils/styles';
 
 type Props = {
@@ -17,6 +19,12 @@ export function GameOverScreen({ summary, onRestart, onHome }: Props) {
   const lastScore = useProgressStore((s) => s.lastScore);
   const bestScore = useProgressStore((s) => s.bestScore);
   const totalCoins = useProgressStore((s) => s.totalCoins);
+  const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
+  const unlockedSpaces = useProgressStore((s) => s.unlockedSpaces);
+  const teaser = useMemo(
+    () => nextUnlockTeaser(totalCoins, unlockedSkins, unlockedSpaces),
+    [totalCoins, unlockedSkins, unlockedSpaces],
+  );
 
   return (
     <SafeAreaView style={ui.screen}>
@@ -33,6 +41,8 @@ export function GameOverScreen({ summary, onRestart, onHome }: Props) {
           <Stat label="BEST SCORE" value={String(bestScore)} />
           <Stat label="TOTAL DUMBBELLS" value={String(totalCoins)} accent />
         </View>
+
+        {teaser ? <UnlockTeaserCard teaser={teaser} /> : null}
 
         <Pressable style={ui.primaryBtn} onPress={onRestart}>
           <Text style={ui.primaryBtnText}>PLAY AGAIN</Text>
