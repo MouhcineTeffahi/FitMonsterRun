@@ -157,3 +157,37 @@ export function billboardFrameGeometry() {
     { geo: box(3.0, 0.08, 0.5), color: '#3B3F58', at: { y: 3.9, z: 0.15 } },
   ]);
 }
+
+/** Saguaro cactus with two arms; tinted per instance. */
+export function cactusGeometry() {
+  return mergeParts([
+    { geo: cyl(0.32, 0.36, 3.2, 8), color: '#3FA34D', at: { y: 1.6 }, tint: 1 },
+    { geo: ico(0.32, 1), color: '#3FA34D', at: { y: 3.2, s: [1, 0.7, 1] }, tint: 1 },
+    { geo: cyl(0.2, 0.2, 0.8, 7), color: '#3FA34D', at: { x: 0.55, y: 1.5, rz: Math.PI / 2 }, tint: 1 },
+    { geo: cyl(0.2, 0.2, 1.1, 7), color: '#3FA34D', at: { x: 0.85, y: 2.0 }, tint: 1 },
+    { geo: cyl(0.18, 0.18, 0.6, 7), color: '#3FA34D', at: { x: -0.5, y: 2.1, rz: Math.PI / 2 }, tint: 1 },
+    { geo: cyl(0.18, 0.18, 0.8, 7), color: '#3FA34D', at: { x: -0.72, y: 2.45 }, tint: 1 },
+    { geo: ico(0.16), color: '#FF5FA2', at: { y: 3.45 } },
+  ]);
+}
+
+/** Chunky desert boulder; scaled per instance into mesas and rocks. */
+export function rockGeometry() {
+  return mergeParts([
+    { geo: new THREE.DodecahedronGeometry(1, 0), color: '#D9824B', at: { y: 0.6, s: [1.2, 0.8, 1] }, tint: 1 },
+    { geo: new THREE.DodecahedronGeometry(0.6, 0), color: '#C46E3C', at: { x: 0.7, y: 0.35, z: 0.3 }, tint: 1 },
+  ]);
+}
+
+/** Giant dumbbell statue on a plinth for the gym district. */
+export function dumbbellStatueGeometry() {
+  const plate = (x: number, r: number, c: string): Part => ({ geo: cyl(r, r, 0.35, 14), color: c, at: { x, y: 2.6, rz: Math.PI / 2 }, tint: 1 });
+  return mergeParts([
+    { geo: box(2.6, 1.2, 1.6), color: '#3B3F58', at: { y: 0.6 } },
+    { geo: box(2.7, 0.12, 1.7), color: [2.4, 2.0, 0.6], at: { y: 1.22 } },
+    { geo: cyl(0.12, 0.12, 0.9, 8), color: '#AEB6C8', at: { y: 1.7 } },
+    { geo: cyl(0.13, 0.13, 3.0, 10), color: '#D7DCE6', at: { y: 2.6, rz: Math.PI / 2 } },
+    plate(-1.2, 0.9, '#FF3D5A'), plate(-0.88, 0.7, '#FF3D5A'),
+    plate(1.2, 0.9, '#FF3D5A'), plate(0.88, 0.7, '#FF3D5A'),
+  ]);
+}

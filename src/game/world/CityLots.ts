@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { AWNINGS, BEACH_FACADES, biomeAt, FACADES, SIGNS, type Biome } from './biomes';
+import { AWNINGS, BEACH_FACADES, biomeAt, DESERT_ROCKS, FACADES, GYM_FACADES, SIGNS, type Biome } from './biomes';
 import { BASE_BOX, chance, choose, hide, instanced, paint, propMaterial, put, rand, Scroller, UNIT_BOX } from './kit';
 import * as P from './props';
 
@@ -27,13 +27,13 @@ const LOW_Y = -16.6;
 type MeshKey =
   | 'bodies' | 'trims' | 'awnings' | 'signs' | 'tanks' | 'trees' | 'palms' | 'lamps'
   | 'benches' | 'bins' | 'bushes' | 'pots' | 'umbrellas' | 'billboards' | 'ground'
-  | 'sea' | 'tunnel' | 'neon' | 'portal' | 'rails' | 'pillars';
+  | 'sea' | 'tunnel' | 'neon' | 'portal' | 'rails' | 'pillars' | 'cacti' | 'rocks' | 'statues';
 
 /** Instances reserved per lot in each mesh. */
 const PER_LOT: Record<MeshKey, number> = {
   bodies: 4, trims: 4, awnings: 2, signs: 3, tanks: 2, trees: 2, palms: 4, lamps: 2,
   benches: 2, bins: 2, bushes: 2, pots: 2, umbrellas: 2, billboards: 1, ground: 7,
-  sea: 1, tunnel: 3, neon: 10, portal: 3, rails: 8, pillars: 2,
+  sea: 1, tunnel: 3, neon: 10, portal: 3, rails: 8, pillars: 2, cacti: 4, rocks: 4, statues: 1,
 };
 
 type Op = { mesh: THREE.InstancedMesh; i: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; rz: number };
@@ -138,6 +138,9 @@ export class CityLots {
     m.portal = instanced(UNIT_BOX, std({ color: '#7A7396', roughness: 0.9 }), n('portal'));
     m.rails = instanced(UNIT_BOX, std({ color: '#F4F6FA', metalness: 0.55, roughness: 0.3 }), n('rails'));
     m.pillars = instanced(UNIT_BOX, std({ color: '#CFC9DE' }), n('pillars'));
+    m.cacti = instanced(P.cactusGeometry(), props, n('cacti'), { cast: true, colored: true });
+    m.rocks = instanced(P.rockGeometry(), props, n('rocks'), { cast: true, colored: true });
+    m.statues = instanced(P.dumbbellStatueGeometry(), props, n('statues'), { cast: true, colored: true });
 
     this.scroller = new Scroller(
       LOT_COUNT, LOT_LEN, FIRST_Z, FIRST_Z,
@@ -197,6 +200,10 @@ export class CityLots {
     if (biome === 'city') this.city();
     else if (biome === 'beach') this.beach();
     else if (biome === 'tunnel') this.tunnel(entering);
+    else if (biome === 'night') this.night();
+    else if (biome === 'sunset') this.bridge('#8E6FA8', '#C77A6B');
+    else if (biome === 'gym') this.gym();
+    else if (biome === 'desert') this.desert();
     else this.bridge();
   }
 
@@ -321,8 +328,8 @@ export class CityLots {
     }
   }
 
-  private bridge() {
-    this.add('ground', 6, 0, -0.55, -LOT_LEN / 2, WALK_EDGE * 2 + 0.2, 1.0, LOT_LEN + 0.02, 0, 0, '#A7AABF');
+  private bridge(deck = '#A7AABF', below = '#86D07A') {
+    this.add('ground', 6, 0, -0.55, -LOT_LEN / 2, WALK_EDGE * 2 + 0.2, 1.0, LOT_LEN + 0.02, 0, 0, deck);
     for (const side of [-1, 1]) {
       const k = side < 0 ? 0 : 1;
       this.sidewalk(side, '#C9CCDA');
@@ -332,9 +339,56 @@ export class CityLots {
       this.add('rails', k * 4 + 3, side * (WALK_EDGE - 0.08), 0.55, -7.5, 0.1, 1.05, 0.1);
       if (this.counter % 2 === 0) this.add('pillars', k, side * 3.4, LOW_Y / 2 - 0.5, -LOT_LEN / 2, 1.7, -LOW_Y - 1, 1.7);
       // The city far below the deck.
-      this.add('ground', 4 + k, side * (WALK_EDGE + 30), LOW_Y - 0.05, -LOT_LEN / 2, 60, 0.1, LOT_LEN + 0.02, 0, 0, '#86D07A');
+      this.add('ground', 4 + k, side * (WALK_EDGE + 30), LOW_Y - 0.05, -LOT_LEN / 2, 60, 0.1, LOT_LEN + 0.02, 0, 0, below);
       this.building(side, k, { w: [5, 9], d: [6, 9], h: [6, 13.5], palette: FACADES, x0: rand(10, 26), y0: LOW_Y, decor: false });
       if ((this.counter + k) % 3 === 0) this.lamp(side, k, -5, side * 7.3);
+    }
+  }
+
+  /** Downtown at night: the city layout plus neon strips and glowing billboards. */
+  private night() {
+    this.city();
+    for (const side of [-1, 1]) {
+      const k = side < 0 ? 0 : 1;
+      const c = tmpColor.set(this.counter % 2 ? '#B46BFF' : '#00E5FF').multiplyScalar(1.8);
+      this.add('neon', k, side * (FACADE_X - 0.06), 2.0, -LOT_LEN / 2, 0.06, 0.1, LOT_LEN * 0.8, 0, 0, c);
+      if (chance(0.5)) this.add('neon', 2 + k, side * (FACADE_X - 0.08), rand(5, 9), -LOT_LEN / 2 + rand(-2, 2), 0.06, rand(1.2, 2.4), 0.12, 0, 0, tmpColor.set(choose(SIGNS)).multiplyScalar(2));
+    }
+  }
+
+  /** Gym district: red/steel gyms, giant dumbbell statues and hedges. */
+  private gym() {
+    for (const side of [-1, 1]) {
+      const k = side < 0 ? 0 : 1;
+      this.sidewalk(side, this.counter % 2 ? '#D7DCE6' : '#C9CFDB');
+      this.outer(side, '#BFE3A8');
+      this.building(side, k, { w: [6, 9], d: [7, 9.4], h: [4.5, 9], palette: GYM_FACADES });
+      if ((this.counter + k) % 3 === 0) {
+        this.add('statues', 0, side * 6.3, 0.06, -5, 1, 1, 1, side < 0 ? 0.3 : -0.3, 0, choose(['#FF3D5A', '#2F6BFF', '#FFB02E']));
+      } else {
+        this.add('bushes', k, side * 6.9, 0.06, -3, 1.2, 0.9, 1.4, 0, 0, '#5CCB5F');
+        this.add('bushes', 2 + k, side * 6.9, 0.06, -7, 1.2, 0.9, 1.4, 0, 0, '#5CCB5F');
+      }
+      if ((this.counter + k) % 2 === 0) this.lamp(side, k, -1.5);
+      if (chance(0.5)) this.add('benches', k, side * 7.0, 0.06, -8.3, 1, 1, 1, side < 0 ? Math.PI : 0);
+    }
+  }
+
+  /** Desert road: sand, cacti, red rocks and distant mesas. */
+  private desert() {
+    for (const side of [-1, 1]) {
+      const k = side < 0 ? 0 : 1;
+      this.sidewalk(side, '#F2C98A');
+      this.outer(side, '#F4CF92', WALK_EDGE, 60);
+      for (let c = 0; c < 2; c++) {
+        if (chance(0.7)) this.add('cacti', k * 2 + c, side * rand(6.4, 14), 0, rand(-9, -1), rand(0.8, 1.3), rand(0.8, 1.4), rand(0.8, 1.3), rand(0, 6), 0, tmpColor.setHSL(0.33, 0.5, rand(0.75, 1)));
+      }
+      if (chance(0.6)) this.add('rocks', k * 2, side * rand(7, 12), 0, rand(-9, -1), rand(0.6, 1.4), rand(0.5, 1.2), rand(0.6, 1.4), rand(0, 6), 0, choose(DESERT_ROCKS));
+      if (this.counter % 3 === k) {
+        // Distant mesa: a huge flattened rock far from the road.
+        this.add('rocks', k * 2 + 1, side * rand(30, 45), -1, -LOT_LEN / 2, rand(10, 16), rand(6, 10), rand(6, 9), rand(0, 6), 0, choose(DESERT_ROCKS));
+      }
+      if ((this.counter + k) % 4 === 0) this.lamp(side, k, -5);
     }
   }
 }

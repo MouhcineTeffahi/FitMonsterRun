@@ -10,6 +10,7 @@ import Animated, {
 
 import { MISSIONS, type ChallengeStat } from '../data/challenges';
 import { getSkin } from '../data/skins';
+import { getSpace } from '../data/spaces';
 import { colors, MAX_ENERGY } from '../data/theme';
 import type { RunSummary } from '../data/types';
 import {
@@ -19,7 +20,8 @@ import {
   type RunStats,
 } from '../game/RunnerScene';
 import { clampLane } from '../game/sim/patterns';
-import { BASE_SPEED, LEVEL_BONUS_COINS, SLAP_COINS, levelGoalFor } from '../game/sim/runSim';
+import { BASE_SPEED, LEVEL_BONUS_COINS, SLAP_COINS, SPACE_BONUS, levelGoalFor } from '../game/sim/runSim';
+import { BIOME_NAME, setBiomeOrder, type Biome } from '../game/world/biomes';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
 import { HUD, type MissionView } from '../ui/HUD';
@@ -94,6 +96,11 @@ export function GameScreen({ onGameOver }: Props) {
   const recordRun = useProgressStore((s) => s.recordRun);
   const skin = useMemo(() => getSkin(selectedSkin), [selectedSkin]);
 
+  const selectedSpace = useProgressStore((s) => s.selectedSpace);
+  // The world reads the rotation while mounting, so set it before the first render of the scene.
+  useState(() => setBiomeOrder(getSpace(selectedSpace).biomes));
+  const [biome, setBiome] = useState<Biome | null>(null);
+  const firstBiome = useRef(true);
   const [paused, setPaused] = useState(false);
   const [stats, setStats] = useState<RunStats>(INITIAL_STATS);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -281,6 +288,18 @@ export function GameScreen({ onGameOver }: Props) {
     [flash, flashColor, showToast],
   );
 
+  const onBiome = useCallback(
+    (next: Biome) => {
+      setBiome(next);
+      if (firstBiome.current) {
+        firstBiome.current = false;
+        return;
+      }
+      showToast({ text: `${BIOME_NAME[next]}  +${SPACE_BONUS}🪙`, color: colors.yellowBright }, 1800);
+    },
+    [showToast],
+  );
+
   const nextLevel = useCallback(() => setLevelDone(null), []);
 
   const handleGameOver = useCallback(
@@ -343,6 +362,7 @@ export function GameScreen({ onGameOver }: Props) {
             controls={controls}
             onStats={onStats}
             onEvent={onEvent}
+            onBiome={onBiome}
             onGameOver={handleGameOver}
             onReady={onReady}
             onPostFx={setPostFx}
@@ -361,7 +381,7 @@ export function GameScreen({ onGameOver }: Props) {
       ) : null}
 
       {levelDone ? null : (
-        <HUD stats={stats} mission={mission} paused={paused} onPause={togglePause} />
+        <HUD stats={stats} mission={mission} paused={paused} onPause={togglePause} space={biome ? BIOME_NAME[biome] : null} />
       )}
 
       {intro !== null ? (

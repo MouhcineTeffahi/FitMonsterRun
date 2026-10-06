@@ -11,8 +11,8 @@ import { Vfx, type BurstKind, type VfxHandle } from './fx/Vfx';
 import { useObstaclePools } from './obstacles/EntityPools';
 import { Player, type PlayerFrame, type PlayerHandle } from './player/Player';
 import { createSlots, LANE_X, PLAYER_Z, POOL_SIZES, type Slot, type Variant3D } from './sim/patterns';
-import { BASE_SPEED, createRunState, levelGoalFor, stepRun, type RunEvent, type RunStats } from './sim/runSim';
-import { ENV, FOG_LIMIT } from './world/biomes';
+import { BASE_SPEED, createRunState, levelGoalFor, SPACE_BONUS, stepRun, type RunEvent, type RunStats } from './sim/runSim';
+import { ENV, FOG_LIMIT, type Biome } from './world/biomes';
 import { World, type WorldHandle } from './world/World';
 
 export type { RunStats };
@@ -32,6 +32,8 @@ type Props = {
   controls: React.MutableRefObject<RunControls>;
   onStats: (stats: RunStats) => void;
   onEvent: (event: PickupEvent) => void;
+  /** Called with the biome under the runner at start and whenever it changes. */
+  onBiome?: (biome: Biome) => void;
   onGameOver: (stats: RunStats) => void;
   onReady?: () => void;
   /** False when post-processing is bypassed (show a 2D vignette instead). */
@@ -54,11 +56,12 @@ const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
   power: 'power',
   level: 'confetti',
   convert: 'confetti',
+  space: 'confetti',
   burp: 'burp',
   bonk: 'stars',
 };
 
-const BURST_Y: Partial<Record<RunEvent, number>> = { coin: 1.1, level: 2.5, convert: 1.2, burp: 1.4, bonk: 1.9 };
+const BURST_Y: Partial<Record<RunEvent, number>> = { coin: 1.1, level: 2.5, convert: 1.2, space: 2.5, burp: 1.4, bonk: 1.9 };
 
 const BASE_FOV = 62;
 /** Seconds the death animation plays before the Game Over screen. */
@@ -85,7 +88,7 @@ export function RunnerScene(props: Props) {
   );
 }
 
-function Game({ skin, controls, onStats, onEvent, onGameOver, onReady, onPostFx }: Props) {
+function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, onPostFx }: Props) {
   const { camera, scene, gl } = useThree();
   const player = useRef<PlayerHandle>(null);
   const world = useRef<WorldHandle>(null);
@@ -108,6 +111,7 @@ function Game({ skin, controls, onStats, onEvent, onGameOver, onReady, onPostFx 
   const statsTimer = useRef(0);
   const fovPunch = useRef(0);
   const clock = useRef(0);
+  const lastBiome = useRef<Biome | null>(null);
   const auditFrames = useRef(0);
   const scratch = useMemo(
     () => ({ color: new THREE.Color(), look: new THREE.Vector3() }),
@@ -242,8 +246,18 @@ function Game({ skin, controls, onStats, onEvent, onGameOver, onReady, onPostFx 
             : null,
       );
 
-      const env = ENV[wh.currentBiome()];
-      const k = Math.min(1, dt * 1.8);
+      const biome = wh.currentBiome();
+      const firstFrame = lastBiome.current === null;
+      if (biome !== lastBiome.current) {
+        if (lastBiome.current !== null && !s.dead) {
+          s.stats.coins += SPACE_BONUS;
+          emit('space');
+        }
+        lastBiome.current = biome;
+        onBiome?.(biome);
+      }
+      const env = ENV[biome];
+      const k = firstFrame ? 1 : Math.min(1, dt * 1.8);
       const sky = wh.sky;
       sky.uTop.value.lerp(scratch.color.set(env.skyTop), k);
       sky.uMid.value.lerp(scratch.color.set(env.skyMid), k);

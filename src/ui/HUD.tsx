@@ -26,6 +26,8 @@ type Props = {
   mission: MissionView | null;
   paused: boolean;
   onPause: () => void;
+  /** Name of the world under the runner. */
+  space?: string | null;
 };
 
 /**
@@ -33,7 +35,7 @@ type Props = {
  * top-right, vertical ÉNERGIE bar on the left, mission box at the bottom that
  * turns into the MODE POWER ! timer while power mode runs.
  */
-export function HUD({ stats, mission, paused, onPause }: Props) {
+export function HUD({ stats, mission, paused, onPause, space }: Props) {
   const energyPct = Math.max(0, Math.min(1, stats.energy / MAX_ENERGY));
   const powered = stats.power > 0;
   const mult = stats.multiplier * (powered ? 2 : 1);
@@ -111,6 +113,11 @@ export function HUD({ stats, mission, paused, onPause }: Props) {
         </View>
         <Text style={styles.levelLeft}>{levelLeft} m</Text>
       </View>
+      {space ? (
+        <View style={styles.spaceChip} pointerEvents="none">
+          <Text style={styles.spaceText}>{space}</Text>
+        </View>
+      ) : null}
 
       <Animated.View style={[styles.energyWrap, energyStyle]} pointerEvents="none">
         <View style={styles.energyTrack}>
@@ -221,6 +228,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  spaceChip: {
+    alignSelf: 'center',
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(10,16,32,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  spaceText: {
+    ...display,
+    color: colors.yellowBright,
+    fontSize: 12,
   },
   levelName: {
     ...display,

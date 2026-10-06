@@ -244,7 +244,9 @@ export type PatternId =
   | 'wheyBarriers'
   | 'vans'
   | 'oncoming'
-  | 'slackers';
+  | 'slackers'
+  | 'coinSnake'
+  | 'conga';
 
 const WEIGHTS: [PatternId, number][] = [
   ['truck', 14],
@@ -259,6 +261,8 @@ const WEIGHTS: [PatternId, number][] = [
   ['vans', 8],
   ['oncoming', 8],
   ['slackers', 22],
+  ['coinSnake', 6],
+  ['conga', 6],
 ];
 
 /** Walls, doubles, and oncoming trucks wait until the runner has some speed. */
@@ -379,6 +383,21 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       place(slots, 'slap', 'slacker', a, z - 5, 0, 0, WALK_SPEED);
       coinRow(slots, b, z + 1, 4);
       if (Math.random() < 0.55) place(slots, 'healthy', pick(HEALTHY), b, z - 7, 0.9);
+      break;
+    }
+    case 'coinSnake': {
+      // Breather: a coin trail weaving across all three lanes, with a whey at the end.
+      const weave: LaneIndex[] = [1, 1, 2, 2, 2, 1, 0, 0, 0, 1, 2, 2, 2, 1];
+      weave.forEach((l, i) => place(slots, 'coin', 'coin', l, z - i * 2.1, 0.9));
+      place(slots, 'healthy', 'whey', randomLane(), z - 31, 0.9);
+      break;
+    }
+    case 'conga': {
+      // Couch-potato conga line: slap them all in a row for a combo.
+      for (let i = 0; i < 3; i++) place(slots, 'slap', 'slacker', lane, z - i * 3.2, 0, 0, WALK_SPEED);
+      coinRow(slots, lane, z + 4, 3);
+      place(slots, 'barrier', pick(JUNK), a, z - 3, 0);
+      if (Math.random() < 0.6) place(slots, 'healthy', pick(HEALTHY), b, z - 4, 0.9);
       break;
     }
     case 'oncoming': {

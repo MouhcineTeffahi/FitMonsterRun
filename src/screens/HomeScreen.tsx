@@ -10,6 +10,7 @@ import { DumbbellMark } from '../ui/DumbbellMark';
 import { display } from '../ui/fonts';
 import { Logo } from '../ui/Logo';
 import { MenuBackdrop } from '../ui/MenuBackdrop';
+import { SpacePicker } from '../ui/SpacePicker';
 import { ui } from '../utils/styles';
 
 type Props = {
@@ -66,6 +67,7 @@ export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Prop
 
         <View style={styles.menu}>
           <Text style={styles.best}>BEST SCORE: {bestScore}</Text>
+          <SpacePicker />
           <Pressable style={[ui.primaryBtn, styles.playBtn]} onPress={onPlay} accessibilityRole="button">
             <Text style={[ui.primaryBtnText, styles.playText]}>PLAY</Text>
           </Pressable>

@@ -40,6 +40,7 @@ const EVENT_SFX: Partial<Record<RunEvent, SfxName>> = {
   bonk: 'boing',
   burp: 'burp',
   convert: 'healthy',
+  space: 'level',
   roof: 'land',
   platform: 'land',
 };

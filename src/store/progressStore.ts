@@ -8,6 +8,7 @@ import {
 } from '../data/skins';
 import { MAX_ENERGY } from '../data/theme';
 import { DAILY_CHALLENGES, todayKey, type ChallengeStat } from '../data/challenges';
+import { DEFAULT_SPACE, FREE_SPACES, getSpace, isSpaceId, type SpaceId } from '../data/spaces';
 
 const STORAGE_KEY = '@fit_monster_run/progress_v1';
 
@@ -21,6 +22,8 @@ type PersistedSlice = {
   daily: DailyState;
   /** Personal best runs, highest first (CLASSEMENT). */
   topScores: number[];
+  selectedSpace: SpaceId;
+  unlockedSpaces: SpaceId[];
 };
 
 export type DailyState = {
@@ -63,6 +66,8 @@ type ProgressState = PersistedSlice &
     finishRun: () => void;
     recordRun: (run: RunRecord) => void;
     claimChallenge: (id: string) => boolean;
+    /** Selects the space, buying it first if needed; false if unaffordable. */
+    chooseSpace: (id: SpaceId) => boolean;
   };
 
 function isSkinId(value: unknown): value is SkinId {
@@ -83,6 +88,8 @@ function persistedPayload(state: PersistedSlice): PersistedSlice {
     soundEnabled: state.soundEnabled,
     daily: state.daily,
     topScores: state.topScores,
+    selectedSpace: state.selectedSpace,
+    unlockedSpaces: state.unlockedSpaces,
   };
 }
 
@@ -100,6 +107,13 @@ function parseDaily(raw: unknown): DailyState {
   return currentDaily({ date: d.date, progress, claimed });
 }
 
+function parseSpaces(parsed: Partial<PersistedSlice>): Pick<PersistedSlice, 'selectedSpace' | 'unlockedSpaces'> {
+  const stored = Array.isArray(parsed.unlockedSpaces) ? parsed.unlockedSpaces.filter(isSpaceId) : [];
+  const unlockedSpaces = [...new Set([...FREE_SPACES, ...stored])];
+  const selectedSpace = isSpaceId(parsed.selectedSpace) && unlockedSpaces.includes(parsed.selectedSpace) ? parsed.selectedSpace : DEFAULT_SPACE;
+  return { selectedSpace, unlockedSpaces };
+}
+
 export const useProgressStore = create<ProgressState>((set, get) => ({
   totalCoins: 0,
   selectedSkin: DEFAULT_SKIN,
@@ -109,6 +123,8 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   soundEnabled: true,
   daily: freshDaily(),
   topScores: [],
+  selectedSpace: DEFAULT_SPACE,
+  unlockedSpaces: [...FREE_SPACES],
   currentEnergy: MAX_ENERGY,
   currentScore: 0,
   currentDistance: 0,
@@ -195,6 +211,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
         topScores: Array.isArray(parsed.topScores)
           ? parsed.topScores.map(Number).filter(Number.isFinite).slice(0, 5)
           : [],
+        ...parseSpaces(parsed),
         hydrated: true,
       });
     } catch {
@@ -257,6 +274,18 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
       daily: { ...daily, claimed: [...daily.claimed, id] },
       totalCoins: s.totalCoins + def.reward,
     }));
+    void get().saveProgress();
+    return true;
+  },
+
+  chooseSpace: (id) => {
+    const { unlockedSpaces, totalCoins } = get();
+    if (!unlockedSpaces.includes(id)) {
+      const cost = getSpace(id).cost;
+      if (totalCoins < cost) return false;
+      set({ totalCoins: totalCoins - cost, unlockedSpaces: [...unlockedSpaces, id] });
+    }
+    set({ selectedSpace: id });
     void get().saveProgress();
     return true;
   },

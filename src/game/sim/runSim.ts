@@ -64,6 +64,7 @@ export type RunEvent =
   | 'kick'
   /** A slapped pedestrian starts doing cardio on the sidewalk. */
   | 'convert'
+  | 'space'
   /** Hit flavour, emitted right after 'hit': junk food vs. trucks/signs. */
   | 'burp'
   | 'bonk'
@@ -135,6 +136,8 @@ export const POWER_TIME = 8;
 export const POWER_CHARGE = 3;
 /** Coins paid for every slapped or kicked pedestrian. */
 export const SLAP_COINS = 2;
+/** Coins for reaching a new biome during a run. */
+export const SPACE_BONUS = 25;
 const DANCE_CHANCE = 0.35;
 const DANCE_HOP = 7;
 /** Sidewalk line converted pedestrians jog along. */
