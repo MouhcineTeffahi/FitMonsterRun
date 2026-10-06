@@ -5,6 +5,7 @@ import { getSkin, SKINS, type SkinId } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
+import { DumbbellMark } from '../ui/DumbbellMark';
 import { display } from '../ui/fonts';
 import { MonsterPreview } from '../ui/MonsterPreview';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -41,16 +42,16 @@ export function ShopScreen({ onBack }: Props) {
   };
 
   const actionLabel = selected
-    ? 'SÉLECTIONNÉ ✓'
+    ? 'SELECTED ✓'
     : unlocked
-      ? 'SÉLECTIONNER'
+      ? 'SELECT'
       : canAfford
-        ? `ACHETER · ${preview.price}`
-        : `IL MANQUE ${preview.price - totalCoins}`;
+        ? `BUY · ${preview.price}`
+        : `NEED ${preview.price - totalCoins} MORE`;
 
   return (
     <SafeAreaView style={ui.screen}>
-      <ScreenHeader title="BOUTIQUE / SKINS" onBack={onBack} coins={totalCoins} />
+      <ScreenHeader title="SHOP / SKINS" onBack={onBack} coins={totalCoins} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.stage}>
@@ -99,11 +100,11 @@ export function ShopScreen({ onBack }: Props) {
                     <Text style={styles.checkText}>✓</Text>
                   </View>
                 ) : owned ? (
-                  <Text style={styles.owned}>DÉBLOQUÉ</Text>
+                  <Text style={styles.owned}>OWNED</Text>
                 ) : (
                   <View style={styles.priceRow}>
                     <Text style={styles.price}>{skin.price}</Text>
-                    <View style={styles.coin} />
+                    <DumbbellMark size={16} />
                   </View>
                 )}
               </Pressable>
@@ -199,14 +200,6 @@ const styles = StyleSheet.create({
     ...display,
     color: colors.yellow,
     fontSize: 17,
-  },
-  coin: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FFC21A',
-    borderWidth: 2,
-    borderColor: '#FFE88A',
   },
   owned: {
     ...display,

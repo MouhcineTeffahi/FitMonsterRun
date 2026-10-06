@@ -24,6 +24,8 @@ export const TRUCKS = {
 export type TruckVariant = keyof typeof TRUCKS;
 /** Extra closing speed of oncoming trucks (units/s, toward the runner). */
 export const ONCOMING_SPEED = 9;
+/** Fat pedestrians walk toward the runner, slower than traffic. */
+export const WALK_SPEED = 3.6;
 
 /** Raised walkways / moving platforms. */
 export const PLATFORM_HEIGHT = 1.4;
@@ -37,7 +39,7 @@ export const PLATFORM_SWAY = LANE_X[1] - LANE_X[0];
 export const OVERHEAD_BOTTOM = 1.1;
 export const OVERHEAD_TOP = 3.1;
 
-export type Kind3D = 'truck' | 'platform' | 'ramp' | 'barrier' | 'overhead' | 'coin' | 'healthy';
+export type Kind3D = 'truck' | 'platform' | 'ramp' | 'barrier' | 'overhead' | 'coin' | 'healthy' | 'slap';
 
 export type JunkVariant = 'burger' | 'donut' | 'fries' | 'soda';
 export type HealthyVariant = 'broccoli' | 'chicken' | 'apple' | 'whey' | 'water';
@@ -49,6 +51,7 @@ export type Variant3D =
   | 'rampLow'
   | 'overhead'
   | 'coin'
+  | 'slacker'
   | JunkVariant
   | HealthyVariant;
 
@@ -74,6 +77,7 @@ export const POOL_SIZES: Record<Variant3D, number> = {
   apple: 3,
   whey: 4,
   water: 3,
+  slacker: 6,
 };
 
 export const SLOT_COUNT = 84;
@@ -109,6 +113,8 @@ export type Slot = {
   seed: number;
   /** Seconds since pickup; -1 when not popping. */
   popT: number;
+  /** Upward speed while a slapped pedestrian is flying. */
+  flyY: number;
   /** Already damaged the player; ignore further contact. */
   hit: boolean;
   /** Index into the variant's render pool; -1 when unbound. */
@@ -129,6 +135,7 @@ export function createSlots(count = SLOT_COUNT): Slot[] {
     phase: 0,
     seed: 0,
     popT: -1,
+    flyY: 0,
     hit: false,
     inst: -1,
   }));
@@ -167,6 +174,7 @@ function place(
   slot.phase = 0;
   slot.seed = Math.random();
   slot.popT = -1;
+  slot.flyY = 0;
   slot.hit = false;
   const body = BODIES[variant];
   patternTail = Math.min(patternTail, z - (body ? body.length / 2 : 0));
@@ -223,7 +231,8 @@ export type PatternId =
   | 'mixed'
   | 'wheyBarriers'
   | 'vans'
-  | 'oncoming';
+  | 'oncoming'
+  | 'slackers';
 
 const WEIGHTS: [PatternId, number][] = [
   ['truck', 14],
@@ -237,12 +246,18 @@ const WEIGHTS: [PatternId, number][] = [
   ['wheyBarriers', 7],
   ['vans', 8],
   ['oncoming', 8],
+  ['slackers', 22],
 ];
-const WEIGHT_SUM = WEIGHTS.reduce((s, [, w]) => s + w, 0);
 
-export function choosePattern(): PatternId {
-  let r = Math.random() * WEIGHT_SUM;
-  for (const [id, w] of WEIGHTS) {
+/** Walls, doubles, and oncoming trucks wait until the runner has some speed. */
+const LATE_PATTERNS: ReadonlySet<PatternId> = new Set(['truckWall', 'twoTrucks', 'oncoming']);
+
+export function choosePattern(distance = Infinity): PatternId {
+  const pool = distance < 420 ? WEIGHTS.filter(([id]) => !LATE_PATTERNS.has(id)) : WEIGHTS;
+  let sum = 0;
+  for (const [, w] of pool) sum += w;
+  let r = Math.random() * sum;
+  for (const [id, w] of pool) {
     r -= w;
     if (r < 0) return id;
   }
@@ -269,6 +284,7 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       truck(slots, lane, z, bigTruck(), ramp, ramp);
       coinRow(slots, a, z, 5);
       if (Math.random() < 0.6) place(slots, 'healthy', pick(HEALTHY), b, z - 4, 0.9);
+      if (Math.random() < 0.7) place(slots, 'slap', 'slacker', b, z - 10, 0, 0, WALK_SPEED);
       break;
     }
     case 'barrierArc': {
@@ -278,6 +294,7 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
         place(slots, 'coin', 'coin', lane, z + 4.2 - i * 2.1, 0.9 + arc);
       }
       if (Math.random() < 0.5) place(slots, 'healthy', pick(HEALTHY), a, z - 2, 0.9);
+      if (Math.random() < 0.65) place(slots, 'slap', 'slacker', b, z - 9, 0, 0, WALK_SPEED);
       break;
     }
     case 'overheads': {
@@ -324,6 +341,7 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       place(slots, 'barrier', pick(JUNK), a, z - 2, 0);
       place(slots, 'overhead', 'overhead', b, z - 2, 0);
       coinRow(slots, b, z + 3, 3, 0.45);
+      place(slots, 'slap', 'slacker', a, z - 8, 0, 0, WALK_SPEED);
       break;
     }
     case 'wheyBarriers': {
@@ -341,6 +359,14 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       }
       if (Math.random() < 0.6) truck(slots, a, z - 6, 'van', false, false);
       place(slots, 'healthy', pick(HEALTHY), b, z - 3, 0.9);
+      break;
+    }
+    case 'slackers': {
+      // Couch potatoes in two lanes. The third lane is clear if you skip them.
+      place(slots, 'slap', 'slacker', lane, z, 0, 0, WALK_SPEED);
+      place(slots, 'slap', 'slacker', a, z - 5, 0, 0, WALK_SPEED);
+      coinRow(slots, b, z + 1, 4);
+      if (Math.random() < 0.55) place(slots, 'healthy', pick(HEALTHY), b, z - 7, 0.9);
       break;
     }
     case 'oncoming': {

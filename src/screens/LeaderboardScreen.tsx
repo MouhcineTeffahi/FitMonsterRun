@@ -22,7 +22,7 @@ export function LeaderboardScreen({ onBack }: Props) {
 
   const rows = useMemo(
     () =>
-      [...RIVALS.map((r) => ({ ...r, me: false })), { name: 'Toi', score: bestScore, me: true }].sort(
+      [...RIVALS.map((r) => ({ ...r, me: false })), { name: 'You', score: bestScore, me: true }].sort(
         (a, b) => b.score - a.score,
       ),
     [bestScore],
@@ -34,7 +34,7 @@ export function LeaderboardScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScreenHeader title="CLASSEMENT" onBack={onBack} />
+      <ScreenHeader title="LEADERBOARD" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.list}>
         {visible.map((r) => {
           const rank = rows.indexOf(r);
@@ -57,12 +57,12 @@ export function LeaderboardScreen({ onBack }: Props) {
         })}
 
         <Pressable style={styles.moreBtn} onPress={() => setExpanded((e) => !e)} accessibilityRole="button">
-          <Text style={styles.moreText}>{expanded ? 'VOIR MOINS' : 'VOIR PLUS'}</Text>
+          <Text style={styles.moreText}>{expanded ? 'SEE LESS' : 'SEE MORE'}</Text>
         </Pressable>
 
         {topScores.length > 0 ? (
           <View style={styles.mine}>
-            <Text style={styles.mineTitle}>TES MEILLEURES COURSES</Text>
+            <Text style={styles.mineTitle}>YOUR BEST RUNS</Text>
             {topScores.map((s, i) => (
               <View key={`${s}-${i}`} style={styles.mineRow}>
                 <Text style={styles.mineRank}>#{i + 1}</Text>

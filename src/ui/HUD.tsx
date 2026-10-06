@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { colors, MAX_ENERGY, radii } from '../data/theme';
-import { POWER_CHARGE, POWER_TIME, type RunStats } from '../game/sim/runSim';
+import { levelGoalFor, POWER_CHARGE, POWER_TIME, type RunStats } from '../game/sim/runSim';
+import { DumbbellMark } from './DumbbellMark';
 import { display } from './fonts';
 import { MissionBox } from './MissionBox';
 
@@ -30,6 +38,26 @@ export function HUD({ stats, mission, paused, onPause }: Props) {
   const powered = stats.power > 0;
   const mult = stats.multiplier * (powered ? 2 : 1);
   const energyColor = energyPct > 0.5 ? colors.green : energyPct > 0.25 ? colors.yellow : colors.red;
+  const low = energyPct <= 0.25 && stats.energy > 0;
+  const levelStart = levelGoalFor(stats.level - 1);
+  const levelSpan = Math.max(1, stats.levelGoal - levelStart);
+  const levelPct = Math.max(0, Math.min(1, (stats.distance - levelStart) / levelSpan));
+  const levelLeft = Math.max(0, Math.ceil(stats.levelGoal - stats.distance));
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (!low) {
+      pulse.value = withTiming(1, { duration: 120 });
+      return;
+    }
+    pulse.value = withRepeat(
+      withSequence(withTiming(0.4, { duration: 260 }), withTiming(1, { duration: 260 })),
+      -1,
+      false,
+    );
+  }, [low, pulse]);
+
+  const energyStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -40,7 +68,7 @@ export function HUD({ stats, mission, paused, onPause }: Props) {
               onPress={onPause}
               style={styles.pauseBtn}
               accessibilityRole="button"
-              accessibilityLabel={paused ? 'Reprendre' : 'Pause'}
+              accessibilityLabel={paused ? 'Resume' : 'Pause'}
             >
               <View style={styles.pauseBar} />
               <View style={styles.pauseBar} />
@@ -57,14 +85,17 @@ export function HUD({ stats, mission, paused, onPause }: Props) {
               />
             ))}
           </View>
+          {stats.combo >= 2 ? (
+            <View style={styles.comboBadge}>
+              <Text style={styles.comboText}>COMBO x{stats.combo}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.rightCol} pointerEvents="none">
           <View style={styles.pill}>
             <Text style={styles.pillText}>{stats.coins}</Text>
-            <View style={styles.coin}>
-              <View style={styles.coinInner} />
-            </View>
+            <DumbbellMark size={28} />
           </View>
           <View style={[styles.pill, styles.pillSmall]}>
             <Text style={styles.distText}>{Math.floor(stats.distance)} m</Text>
@@ -73,7 +104,15 @@ export function HUD({ stats, mission, paused, onPause }: Props) {
         </View>
       </View>
 
-      <View style={styles.energyWrap} pointerEvents="none">
+      <View style={styles.levelRow} pointerEvents="none">
+        <Text style={styles.levelName}>LV. {stats.level}</Text>
+        <View style={styles.levelTrack}>
+          <View style={[styles.levelFill, { width: `${levelPct * 100}%` }]} />
+        </View>
+        <Text style={styles.levelLeft}>{levelLeft} m</Text>
+      </View>
+
+      <Animated.View style={[styles.energyWrap, energyStyle]} pointerEvents="none">
         <View style={styles.energyTrack}>
           <View
             style={[
@@ -83,13 +122,13 @@ export function HUD({ stats, mission, paused, onPause }: Props) {
           />
           <View style={styles.energyShine} />
         </View>
-        <Text style={styles.energyLabel}>ÉNERGIE</Text>
-      </View>
+        <Text style={styles.energyLabel}>ENERGY</Text>
+      </Animated.View>
 
       <View style={styles.bottom} pointerEvents="none">
         {powered ? (
           <MissionBox
-            label="MODE POWER !"
+            label="POWER MODE!"
             fill={stats.power / POWER_TIME}
             icon="⚡"
             accent={colors.power}
@@ -165,6 +204,51 @@ const styles = StyleSheet.create({
     color: '#7CFF6B',
     fontSize: 20,
   },
+  comboBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.yellow,
+    borderRadius: radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  comboText: {
+    ...display,
+    color: colors.black,
+    fontSize: 13,
+  },
+  levelRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  levelName: {
+    ...display,
+    color: colors.white,
+    fontSize: 13,
+    width: 52,
+  },
+  levelTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(10,16,32,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
+  },
+  levelFill: {
+    height: '100%',
+    backgroundColor: colors.yellow,
+    borderRadius: 5,
+  },
+  levelLeft: {
+    ...display,
+    color: colors.white,
+    fontSize: 12,
+    width: 52,
+    textAlign: 'right',
+  },
   pips: {
     flexDirection: 'row',
     gap: 4,
@@ -208,23 +292,6 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 22,
   },
-  coin: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFC21A',
-    borderWidth: 2,
-    borderColor: '#FFE88A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coinInner: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#D88A00',
-  },
   distText: {
     ...display,
     color: colors.white,
@@ -243,7 +310,7 @@ const styles = StyleSheet.create({
   energyWrap: {
     position: 'absolute',
     left: 14,
-    top: 150,
+    top: 178,
     alignItems: 'center',
     gap: 4,
   },

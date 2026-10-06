@@ -25,6 +25,12 @@ export type MonsterFrame = {
   hitT: number;
   dead: boolean;
   celebrate: boolean;
+  /** 0 none, 1 hand slap, 2 foot kick. */
+  attack?: 0 | 1 | 2;
+  /** 1 uses the right limbs, -1 the left. */
+  attackSide?: 1 | -1;
+  /** Seconds since the slap or kick started. */
+  attackT?: number;
 };
 
 export type FitMonster = {
@@ -122,6 +128,9 @@ function aim(bone: THREE.Object3D, child: THREE.Object3D, target: THREE.Vector3)
   bone.quaternion.copy(q2);
   bone.updateMatrixWorld(true);
 }
+
+const slapElbow = new THREE.Vector3();
+const slapHand = new THREE.Vector3();
 
 /** Model-space targets for the "thinking" menu pose (hand on chin, arm crossed). */
 const POSE = {
@@ -257,6 +266,26 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
         run?.setEffectiveTimeScale(0.85 * f.runRate);
       }
       mixer.update(dt);
+      if (mode === 'run' && f?.attack && (f.attackT ?? 99) < 0.34) {
+        object.updateMatrixWorld(true);
+        const swing = Math.sin(Math.min(1, (f.attackT ?? 0) / 0.28) * Math.PI);
+        const side = f.attackSide === 1 ? 'r' : 'l';
+        const sx = side === 'r' ? -1 : 1;
+        const b = bones;
+        if (f.attack === 1 && b[`upperarm_${side}`] && b[`lowerarm_${side}`]) {
+          aim(b[`upperarm_${side}`], b[`lowerarm_${side}`], toWorld(slapElbow.set(sx * 0.32, 1.22, 0.12 + swing * 0.5)));
+          if (b[`hand_${side}`]) {
+            aim(b[`lowerarm_${side}`], b[`hand_${side}`], toWorld(slapHand.set(sx * 0.06, 1.28 + swing * 0.12, 0.25 + swing * 1.05)));
+          }
+        } else if (f.attack === 2 && b[`thigh_${side}`]) {
+          const shin = b[`calf_${side}`] ?? b[`shin_${side}`];
+          if (shin) {
+            aim(b[`thigh_${side}`], shin, toWorld(slapElbow.set(sx * 0.16, 0.78 - swing * 0.2, 0.12 + swing * 0.6)));
+            const foot = b[`foot_${side}`];
+            if (foot) aim(shin, foot, toWorld(slapHand.set(sx * 0.14, 0.42 - swing * 0.28, 0.18 + swing * 1.15)));
+          }
+        }
+      }
       if (mode === 'pose') {
         object.updateMatrixWorld(true);
         const b = bones;

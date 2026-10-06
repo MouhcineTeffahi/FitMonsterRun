@@ -66,7 +66,8 @@ export function PostFx({ onActive }: Props) {
       });
       const composer = new EffectComposer(gl, target);
       composer.addPass(new RenderPass(scene, camera));
-      const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.55, web ? 1.0 : 0.82);
+      // High threshold and a small radius: lights still glow, food stays sharp.
+      const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.22, web ? 1.2 : 1.08);
       composer.addPass(bloom);
       composer.addPass(new OutputPass());
       composer.addPass(new ShaderPass(GradeShader));

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, spacing } from '../data/theme';
+import { DumbbellMark } from './DumbbellMark';
 import { display } from './fonts';
 
 type Props = {
@@ -14,7 +15,7 @@ type Props = {
 export function ScreenHeader({ title, onBack, coins }: Props) {
   return (
     <View style={styles.header}>
-      <Pressable onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Retour">
+      <Pressable onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
         <Text style={styles.backText}>‹</Text>
       </Pressable>
       <Text style={styles.title} numberOfLines={1}>
@@ -23,7 +24,7 @@ export function ScreenHeader({ title, onBack, coins }: Props) {
       {coins !== undefined ? (
         <View style={styles.pill}>
           <Text style={styles.pillText}>{coins}</Text>
-          <View style={styles.coin} />
+          <DumbbellMark size={22} />
         </View>
       ) : (
         <View style={styles.spacer} />
@@ -80,14 +81,6 @@ const styles = StyleSheet.create({
     ...display,
     color: colors.white,
     fontSize: 17,
-  },
-  coin: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FFC21A',
-    borderWidth: 2,
-    borderColor: '#FFE88A',
   },
   spacer: {
     width: 44,

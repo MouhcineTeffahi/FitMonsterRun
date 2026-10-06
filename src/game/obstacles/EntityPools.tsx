@@ -21,19 +21,32 @@ import {
   type Variant3D,
 } from '../sim/patterns';
 import { hide, instanced, paint, propMaterial, put } from '../world/kit';
-import { coinGeometry, coinMaterial, glowTexture, halo, makeGlowy, waterBottle } from './items';
+import {
+  clothedFatGuy,
+  coinGeometry,
+  coinMaterial,
+  glowTexture,
+  halo,
+  makeGlowy,
+  proteinShaker,
+  sharpenFood,
+  slackerFigure,
+  waterBottle,
+  type WalkRig,
+} from './items';
 import { TRUCK_COLORS, truckGeometry } from './trucks';
 
 const FOOD_MODELS: Partial<Record<Variant3D, { key: ModelKey; size: number }>> = {
-  burger: { key: 'burger', size: 1.5 },
-  donut: { key: 'donut', size: 1.4 },
-  fries: { key: 'fries', size: 1.3 },
-  soda: { key: 'soda', size: 1.3 },
-  broccoli: { key: 'broccoli', size: 1.3 },
-  chicken: { key: 'chicken', size: 1.4 },
-  apple: { key: 'apple', size: 1.1 },
-  whey: { key: 'protein', size: 1.5 },
+  burger: { key: 'burger', size: 2.05 },
+  donut: { key: 'donut', size: 1.9 },
+  fries: { key: 'fries', size: 1.85 },
+  soda: { key: 'soda', size: 1.9 },
+  broccoli: { key: 'broccoli', size: 1.85 },
+  chicken: { key: 'chicken', size: 1.95 },
+  apple: { key: 'apple', size: 1.55 },
 };
+
+const SHIRTS = ['#E23B3B', '#3D7EFF', '#F08A24', '#7A4E9A', '#2E9B57', '#C9842A'];
 
 const JUNK_VARIANTS = new Set<Variant3D>(['burger', 'donut', 'fries', 'soda']);
 const TRUCK_VARIANTS: TruckVariant[] = ['container', 'boxTruck', 'van'];
@@ -52,7 +65,10 @@ export class ObstaclePools {
   private readonly headGlow: THREE.InstancedMesh;
   private readonly coins: THREE.InstancedMesh;
 
-  constructor(foods: Partial<Record<Variant3D, THREE.Object3D>>) {
+  constructor(
+    foods: Partial<Record<Variant3D, THREE.Object3D>>,
+    extras: { proteinTub?: THREE.Object3D; fatGuy?: THREE.Object3D },
+  ) {
     const truckMat = propMaterial({ roughness: 0.42, metalness: 0.08 });
     for (const v of TRUCK_VARIANTS) {
       this.trucks[v] = instanced(truckGeometry(v), truckMat, POOL_SIZES[v], { cast: true, receive: true, colored: true });
@@ -84,13 +100,41 @@ export class ObstaclePools {
     build('platform', hoverPlatform);
     build('walkway', walkway);
     build('water', () => healthyPickup(waterBottle(), '#4FC3FF'));
+    build('whey', () => {
+      if (extras.proteinTub) {
+        try {
+          const tub = normalizedClone(extras.proteinTub, { height: 1.05, anchor: 'center', shadows: true });
+          sharpenFood(tub);
+          makeGlowy(tub, 0.05);
+          return healthyPickup(tub, '#D4A017');
+        } catch {
+          // Fall through to the procedural shaker.
+        }
+      }
+      return healthyPickup(proteinShaker(), '#D4A017');
+    });
+    let shirt = 0;
+    // OpenGameArt "Fatty" (CC0) — real overweight mesh with tee/shorts overlays.
+    build('slacker', () => {
+      const color = SHIRTS[shirt++ % SHIRTS.length];
+      if (extras.fatGuy) {
+        try {
+          const mesh = normalizedClone(extras.fatGuy, { height: 2.05, anchor: 'base', shadows: true });
+          return clothedFatGuy(mesh, color);
+        } catch {
+          // Fall through to the cartoon pedestrian.
+        }
+      }
+      return slackerFigure(color);
+    });
     (Object.keys(FOOD_MODELS) as Variant3D[]).forEach((v) => {
       const def = FOOD_MODELS[v]!;
       const junk = JUNK_VARIANTS.has(v);
       build(v, () => {
         const food = normalizedClone(foods[v]!, { maxSize: def.size, anchor: junk ? 'base' : 'center', shadows: junk });
-        makeGlowy(food, junk ? 0.18 : 0.28);
-        return junk ? junkBarrier(food) : healthyPickup(food, v === 'whey' ? '#42A5F5' : colors.green);
+        sharpenFood(food);
+        makeGlowy(food, junk ? 0.04 : 0.06);
+        return junk ? junkBarrier(food) : healthyPickup(food, colors.green);
       });
     });
   }
@@ -131,10 +175,30 @@ export class ObstaclePools {
     if (!g) return;
     g.visible = true;
     g.position.set(slot.x, slot.y, slot.z);
-    g.scale.setScalar(pop);
+    g.scale.setScalar(slot.kind === 'slap' ? 1 : pop);
     if (slot.kind === 'healthy') {
       g.rotation.y = t * 1.6 + slot.seed * 6.28;
       g.position.y += Math.sin(t * 2.6 + slot.seed * 6.28) * 0.12;
+    } else if (slot.kind === 'slap') {
+      const walk = (g.children[0]?.userData.walk ?? null) as WalkRig | null;
+      if (slot.popT < 0 && walk) {
+        const phase = t * 6.5 + slot.seed * 6.28;
+        const step = Math.sin(phase);
+        if (walk.legs && walk.arms) {
+          walk.legs[0].rotation.x = step * 0.7;
+          walk.legs[1].rotation.x = -step * 0.7;
+          walk.arms[0].rotation.x = -step * 0.55;
+          walk.arms[1].rotation.x = step * 0.55;
+        }
+        walk.body.position.y = Math.abs(step) * 0.06;
+        walk.body.rotation.z = step * 0.14;
+        g.rotation.set(0, 0, 0);
+      } else {
+        const fall = slot.popT;
+        const spin = slot.seed > 0.5 ? 1 : -1;
+        g.rotation.set(-fall * 8, fall * 5 * spin, spin * fall * 6);
+        g.scale.setScalar(1);
+      }
     } else if (slot.sway) {
       g.position.y = Math.sin(slot.phase * 2) * 0.05;
     }
@@ -156,16 +220,25 @@ export class ObstaclePools {
   }
 }
 
+const FOOD_ENTRIES = Object.entries(FOOD_MODELS) as [Variant3D, { key: ModelKey; size: number }][];
+
 export function useObstaclePools(): ObstaclePools {
-  const foodKeys = Object.values(FOOD_MODELS).map((m) => m!.key);
-  const foods = useLoader(GLTFLoader, foodKeys.map(modelUrl));
+  const urls = [
+    ...FOOD_ENTRIES.map(([, def]) => modelUrl(def.key)),
+    modelUrl('proteinTub'),
+    modelUrl('fatGuy'),
+  ];
+  const loaded = useLoader(GLTFLoader, urls);
   return useMemo(() => {
     const map: Partial<Record<Variant3D, THREE.Object3D>> = {};
-    (Object.keys(FOOD_MODELS) as Variant3D[]).forEach((v, i) => {
-      map[v] = foods[i].scene;
+    FOOD_ENTRIES.forEach(([variant], i) => {
+      map[variant] = loaded[i].scene;
     });
-    return new ObstaclePools(map);
-  }, [foods]);
+    return new ObstaclePools(map, {
+      proteinTub: loaded[FOOD_ENTRIES.length]?.scene,
+      fatGuy: loaded[FOOD_ENTRIES.length + 1]?.scene,
+    });
+  }, [loaded]);
 }
 
 // ------------------------------------------------------------------ pieces
@@ -193,8 +266,8 @@ function junkBarrier(food: THREE.Object3D) {
   [-0.6, -0.2, 0.2, 0.6].forEach((x, i) => g.add(mesh(new THREE.BoxGeometry(0.4, 0.3, 0.12), i % 2 ? white : red, x, 0.6, 0)));
   food.position.set(0, 0.76, 0);
   g.add(food);
-  const h = halo('#FF4D4D', 2.2, 0.55);
-  h.position.set(0, 1.35, -0.3);
+  const h = halo('#FF4D4D', 1.05, 0.22);
+  h.position.set(0, 0.9, -0.85);
   g.add(h);
   return g;
 }
@@ -202,8 +275,8 @@ function junkBarrier(food: THREE.Object3D) {
 function healthyPickup(food: THREE.Object3D, color: string) {
   const g = new THREE.Group();
   g.add(food);
-  const h = halo(color, 2.1, 0.7);
-  h.position.z = -0.25;
+  const h = halo(color, 1.05, 0.28);
+  h.position.set(0, -0.15, -0.85);
   g.add(h);
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.5, 0.68, 28),

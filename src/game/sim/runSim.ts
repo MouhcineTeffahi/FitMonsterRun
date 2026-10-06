@@ -41,6 +41,9 @@ export type RunStats = {
   roofs: number;
   /** Junk food barriers cleared by jumping or smashed in power mode. */
   junkDodged: number;
+  /** Pickups in a row. Resets on a hit or after a short gap. */
+  combo: number;
+  bestCombo: number;
 };
 
 /** Gameplay feedback; some drive toasts, the rest drive VFX/camera/audio. */
@@ -57,7 +60,11 @@ export type RunEvent =
   | 'speedup'
   | 'power'
   | 'smash'
+  | 'slap'
+  | 'kick'
   | 'level'
+  | 'combo'
+  | 'lowEnergy'
   | 'death';
 
 export type RunInput = {
@@ -89,6 +96,16 @@ export type RunState = {
   /** Seconds since the last hit (drives the stumble animation). */
   hitT: number;
   dead: boolean;
+  /** Seconds left before the pickup combo expires. */
+  comboT: number;
+  /** 0 none, 1 hand slap, 2 foot kick. */
+  attack: 0 | 1 | 2;
+  /** 1 = target is on the runner's right. */
+  attackSide: 1 | -1;
+  /** Seconds since the current slap or kick started. */
+  attackT: number;
+  /** True after the low-energy warning until energy recovers. */
+  warnedLow: boolean;
   stats: RunStats;
 };
 
@@ -112,6 +129,11 @@ const SMALL_REACH = 0.95;
 export const POWER_TIME = 8;
 export const POWER_CHARGE = 3;
 export const LEVEL_BONUS_COINS = 250;
+/** Pickup chain stays alive this long between collects. */
+const COMBO_WINDOW = 1.8;
+const LOW_ENERGY = 25;
+/** No energy drain until the runner is past the opening stretch. */
+const GRACE_DISTANCE = 80;
 const LEVEL_STEP = 500;
 
 /** Distance at which `level` ends: each level is 500 m × its number (500, 1500, 3000…). */
@@ -132,12 +154,17 @@ export function createRunState(): RunState {
     slideOnLand: false,
     speed: BASE_SPEED,
     speedTimer: 0,
-    gap: 8,
-    nextPattern: 'barrierArc',
+    gap: 6,
+    nextPattern: 'slackers',
     invuln: 0,
     shake: 0,
     hitT: 99,
     dead: false,
+    comboT: 0,
+    attack: 0,
+    attackSide: 1,
+    attackT: 99,
+    warnedLow: false,
     stats: {
       score: 0,
       coins: 0,
@@ -152,8 +179,23 @@ export function createRunState(): RunState {
       levelGoal: levelGoalFor(1),
       roofs: 0,
       junkDodged: 0,
+      combo: 0,
+      bestCombo: 0,
     },
   };
+}
+
+function bumpCombo(s: RunState, emit: (e: RunEvent) => void) {
+  const st = s.stats;
+  st.combo += 1;
+  s.comboT = COMBO_WINDOW;
+  if (st.combo > st.bestCombo) st.bestCombo = st.combo;
+  if (st.combo >= 5 && st.combo % 5 === 0) emit('combo');
+}
+
+/** Extra score once a chain is rolling. */
+function comboBonus(combo: number): number {
+  return combo >= 3 ? combo : 0;
 }
 
 const overlaps = (s: RunState, slot: Slot, reach: number) => Math.abs(s.x - slot.x) < reach;
@@ -194,6 +236,8 @@ function supportHeight(slots: Slot[], s: RunState): number {
 
 function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) => void) {
   s.stats.energy -= damage;
+  s.stats.combo = 0;
+  s.comboT = 0;
   s.invuln = HIT_INVULN_S;
   s.shake = shake;
   s.hitT = 0;
@@ -237,8 +281,9 @@ export function stepRun(
   s.gap -= dz;
   if (s.gap <= 0) {
     const depth = spawnPattern(slots, s.nextPattern);
-    s.nextPattern = choosePattern();
+    s.nextPattern = choosePattern(st.distance);
     s.gap = nextGap(depth, s.nextPattern, s.speed);
+    if (st.distance < 420) s.gap += 8;
     spawned = true;
   }
 
@@ -251,8 +296,15 @@ export function stepRun(
     }
     if (slot.popT >= 0) {
       slot.popT += dt;
-      slot.y += dt * 5;
-      if (slot.popT > 0.28) slot.active = false;
+      if (slot.kind === 'slap') {
+        slot.x += slot.phase * dt;
+        slot.flyY -= 28 * dt;
+        slot.y += slot.flyY * dt;
+        if (slot.popT > 1.45 || slot.y < -4) slot.active = false;
+      } else {
+        slot.y += dt * 5;
+        if (slot.popT > 0.28) slot.active = false;
+      }
       continue;
     }
     const body = BODIES[slot.variant];
@@ -310,7 +362,8 @@ export function stepRun(
   const standingOn = !s.airborne && s.vy <= 0 && supportIsBody ? ground : 0;
   const onRoof = standingOn > 0;
   if (onRoof && !s.onRoof) {
-    st.score += ROOF_BONUS * mult;
+    bumpCombo(s, emit);
+    st.score += (ROOF_BONUS + comboBonus(st.combo)) * mult;
     st.roofs += 1;
     emit(standingOn >= TRUCK_HEIGHT - 0.01 ? 'roof' : 'platform');
   }
@@ -336,7 +389,8 @@ export function stepRun(
         s.airborne = false;
         if (!s.onRoof) {
           s.onRoof = true;
-          st.score += ROOF_BONUS * mult;
+          bumpCombo(s, emit);
+          st.score += (ROOF_BONUS + comboBonus(st.combo)) * mult;
           st.roofs += 1;
           emit(body.height >= TRUCK_HEIGHT - 0.01 ? 'roof' : 'platform');
         }
@@ -353,7 +407,8 @@ export function stepRun(
         slot.popT = 0;
         slot.hit = true;
         st.junkDodged += 1;
-        st.score += 20 * mult;
+        bumpCombo(s, emit);
+        st.score += (20 + comboBonus(st.combo)) * mult;
         emit('smash');
         continue;
       }
@@ -366,6 +421,23 @@ export function stepRun(
       if (top <= OVERHEAD_BOTTOM || s.y >= OVERHEAD_TOP || s.invuln > 0) continue;
       slot.hit = true;
       hurt(s, 25, 0.5, emit);
+    } else if (slot.kind === 'slap') {
+      if (slot.hit || Math.abs(dzp) > 0.75 || !overlaps(s, slot, SMALL_REACH)) continue;
+      if (s.y > 1.15) continue;
+      slot.popT = 0;
+      slot.hit = true;
+      const kick = s.slideT > 0 || s.airborne;
+      const side = slot.x >= s.x ? 1 : -1;
+      // phase = sideways speed, vz = down the street, flyY = launch.
+      slot.phase = side * (kick ? 8 : 14);
+      slot.vz = kick ? -52 : -34;
+      slot.flyY = kick ? 10 : 18;
+      s.attack = kick ? 2 : 1;
+      s.attackSide = slot.x >= s.x ? 1 : -1;
+      s.attackT = 0;
+      bumpCombo(s, emit);
+      st.score += (45 + comboBonus(st.combo)) * mult;
+      emit(kick ? 'kick' : 'slap');
     } else if ((slot.kind === 'coin' || slot.kind === 'healthy') && aligned && slot.lane === lane) {
       if (Math.abs(dzp) > 0.85) continue;
       const reachY = s.slideT > 0 ? s.y + 0.4 : s.y + 1.1;
@@ -373,12 +445,14 @@ export function stepRun(
       slot.popT = 0;
       if (slot.kind === 'coin') {
         st.coins += 1;
-        st.score += 10 * mult;
+        bumpCombo(s, emit);
+        st.score += (10 + comboBonus(st.combo)) * mult;
         emit('coin');
       } else if (slot.variant === 'whey') {
         st.proteins += 1;
         st.energy = Math.min(MAX_ENERGY, st.energy + 18);
-        st.score += 50 * mult;
+        bumpCombo(s, emit);
+        st.score += (50 + comboBonus(st.combo)) * mult;
         st.powerCharge += 1;
         if (st.powerCharge >= POWER_CHARGE) {
           st.powerCharge = 0;
@@ -390,17 +464,30 @@ export function stepRun(
       } else {
         if (slot.variant === 'chicken') st.proteins += 1;
         st.energy = Math.min(MAX_ENERGY, st.energy + 12);
-        st.score += 30 * mult;
+        bumpCombo(s, emit);
+        st.score += (30 + comboBonus(st.combo)) * mult;
         emit('healthy');
       }
     }
   }
 
   s.shake = Math.max(0, s.shake - dt);
+  s.attackT += dt;
   st.power = Math.max(0, st.power - dt);
+  if (st.combo > 0) {
+    s.comboT -= dt;
+    if (s.comboT <= 0) st.combo = 0;
+  }
   st.distance += dz;
   st.score += dz * 0.5 * mult;
-  st.energy = Math.max(0, st.energy - ENERGY_DRAIN_PER_S * dt);
+  if (st.distance > GRACE_DISTANCE) {
+    st.energy = Math.max(0, st.energy - ENERGY_DRAIN_PER_S * dt);
+  }
+  if (st.energy > LOW_ENERGY + 15) s.warnedLow = false;
+  if (!s.warnedLow && st.energy > 0 && st.energy <= LOW_ENERGY) {
+    s.warnedLow = true;
+    emit('lowEnergy');
+  }
 
   if (st.distance >= st.levelGoal) {
     st.level += 1;

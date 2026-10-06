@@ -6,6 +6,7 @@ import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
+import { DumbbellMark } from '../ui/DumbbellMark';
 import { display } from '../ui/fonts';
 import { Logo } from '../ui/Logo';
 import { MenuBackdrop } from '../ui/MenuBackdrop';
@@ -41,14 +42,14 @@ export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Prop
       <SafeAreaView style={styles.safe}>
         <View style={styles.topBar}>
           <View style={styles.pill}>
-            <View style={styles.coin} />
+            <DumbbellMark size={22} />
             <Text style={styles.pillText}>{totalCoins}</Text>
           </View>
           <Pressable
             style={styles.iconBtn}
             onPress={toggleSound}
             accessibilityRole="button"
-            accessibilityLabel={soundEnabled ? 'Couper le son' : 'Activer le son'}
+            accessibilityLabel={soundEnabled ? 'Mute sound' : 'Unmute sound'}
           >
             <Text style={styles.iconText}>{soundEnabled ? '🔊' : '🔇'}</Text>
           </Pressable>
@@ -57,22 +58,22 @@ export function HomeScreen({ onPlay, onShop, onChallenges, onLeaderboard }: Prop
         <View style={styles.brand}>
           <Logo width={270} />
           <Text style={styles.tagline}>
-            COURS. MANGE SAIN.{'\n'}DEVIENS LA MEILLEURE VERSION{'\n'}DE TOI-MÊME !
+            RUN. EAT CLEAN.{'\n'}BECOME THE BEST{'\n'}VERSION OF YOU!
           </Text>
         </View>
 
         <View style={styles.flex} />
 
         <View style={styles.menu}>
-          <Text style={styles.best}>MEILLEUR SCORE : {bestScore}</Text>
+          <Text style={styles.best}>BEST SCORE: {bestScore}</Text>
           <Pressable style={[ui.primaryBtn, styles.playBtn]} onPress={onPlay} accessibilityRole="button">
-            <Text style={[ui.primaryBtnText, styles.playText]}>JOUER</Text>
+            <Text style={[ui.primaryBtnText, styles.playText]}>PLAY</Text>
           </Pressable>
           <View style={styles.row}>
-            <MenuButton label="BOUTIQUE" onPress={onShop} />
-            <MenuButton label="DÉFIS" onPress={onChallenges} badge={claimable} />
+            <MenuButton label="SHOP" onPress={onShop} />
+            <MenuButton label="CHALLENGES" onPress={onChallenges} badge={claimable} />
           </View>
-          <MenuButton label="🏆  CLASSEMENT" onPress={onLeaderboard} />
+          <MenuButton label="🏆  LEADERBOARD" onPress={onLeaderboard} />
         </View>
       </SafeAreaView>
     </View>
@@ -123,14 +124,6 @@ const styles = StyleSheet.create({
     height: 38,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.18)',
-  },
-  coin: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FFC21A',
-    borderWidth: 2,
-    borderColor: '#FFE88A',
   },
   pillText: {
     ...display,

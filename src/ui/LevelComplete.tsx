@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, radii } from '../data/theme';
+import { DumbbellMark } from './DumbbellMark';
 import { display } from './fonts';
 
 type Props = {
@@ -44,11 +45,11 @@ export function LevelComplete({ level, score, bonus, onNext }: Props) {
   return (
     <View style={styles.root}>
       <Animated.View style={[styles.titleWrap, titleStyle]}>
-        <Text style={styles.titleShadow}>NIVEAU TERMINÉ !</Text>
-        <Text style={styles.title}>NIVEAU TERMINÉ !</Text>
+        <Text style={styles.titleShadow}>LEVEL CLEAR!</Text>
+        <Text style={styles.title}>LEVEL CLEAR!</Text>
       </Animated.View>
       <Animated.View style={[styles.card, cardStyle]}>
-        <Text style={styles.levelText}>NIVEAU {level}</Text>
+        <Text style={styles.levelText}>LEVEL {level}</Text>
         <View style={styles.statsRow}>
           <View style={styles.stat}>
             <Text style={styles.statLabel}>SCORE</Text>
@@ -58,13 +59,13 @@ export function LevelComplete({ level, score, bonus, onNext }: Props) {
           <View style={styles.stat}>
             <Text style={styles.statLabel}>BONUS</Text>
             <View style={styles.bonusRow}>
-              <View style={styles.coin} />
+              <DumbbellMark size={22} />
               <Text style={styles.statValue}>+{bonus}</Text>
             </View>
           </View>
         </View>
         <Pressable style={styles.nextBtn} onPress={onNext} accessibilityRole="button">
-          <Text style={styles.nextText}>SUIVANT</Text>
+          <Text style={styles.nextText}>NEXT</Text>
         </Pressable>
       </Animated.View>
     </View>
@@ -145,14 +146,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  coin: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FFC21A',
-    borderWidth: 2,
-    borderColor: '#FFE88A',
   },
   nextBtn: {
     backgroundColor: colors.yellow,

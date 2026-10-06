@@ -12,18 +12,18 @@ export type ChallengeDef = {
 };
 
 export const DAILY_CHALLENGES: ChallengeDef[] = [
-  { id: 'daily-proteins', label: 'Collecte 30 protéines', stat: 'proteins', target: 30, reward: 200, icon: '🥦' },
-  { id: 'daily-junk', label: 'Évite 5 malbouffes', stat: 'junkDodged', target: 5, reward: 150, icon: '🍔' },
-  { id: 'daily-distance', label: 'Cours 1500 mètres', stat: 'distance', target: 1500, reward: 200, icon: '🏃' },
+  { id: 'daily-proteins', label: 'Collect 30 proteins', stat: 'proteins', target: 30, reward: 200, icon: '🥦' },
+  { id: 'daily-junk', label: 'Dodge 5 junk foods', stat: 'junkDodged', target: 5, reward: 150, icon: '🍔' },
+  { id: 'daily-distance', label: 'Run 1500 meters', stat: 'distance', target: 1500, reward: 200, icon: '🏃' },
 ];
 
 /** Missions shown in the run's bottom box, one at a time, in order (then loop). */
 export const MISSIONS: ChallengeDef[] = [
-  { id: 'm-proteins', label: 'COLLECTE 20 PROTÉINES', stat: 'proteins', target: 20, reward: 100, icon: '🍗' },
-  { id: 'm-coins', label: 'RAMASSE 50 PIÈCES', stat: 'coins', target: 50, reward: 80, icon: '🪙' },
-  { id: 'm-roofs', label: 'MONTE SUR 5 CAMIONS', stat: 'roofs', target: 5, reward: 120, icon: '🚚' },
-  { id: 'm-junk', label: 'ÉVITE 5 MALBOUFFES', stat: 'junkDodged', target: 5, reward: 100, icon: '🍟' },
-  { id: 'm-distance', label: 'COURS 1000 M', stat: 'distance', target: 1000, reward: 150, icon: '🏁' },
+  { id: 'm-proteins', label: 'COLLECT 20 PROTEINS', stat: 'proteins', target: 20, reward: 100, icon: '🍗' },
+  { id: 'm-coins', label: 'GRAB 50 DUMBBELLS', stat: 'coins', target: 50, reward: 80, icon: '🏋️' },
+  { id: 'm-roofs', label: 'LAND ON 5 TRUCKS', stat: 'roofs', target: 5, reward: 120, icon: '🚚' },
+  { id: 'm-junk', label: 'DODGE 5 JUNK FOODS', stat: 'junkDodged', target: 5, reward: 100, icon: '🍟' },
+  { id: 'm-distance', label: 'RUN 1000 M', stat: 'distance', target: 1000, reward: 150, icon: '🏁' },
 ];
 
 /** Local rivals for the offline leaderboard (CLASSEMENT). */

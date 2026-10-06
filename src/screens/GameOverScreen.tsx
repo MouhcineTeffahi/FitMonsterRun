@@ -1,41 +1,46 @@
 import React from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, spacing } from '../data/theme';
+import type { RunSummary } from '../data/types';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
 import { ui } from '../utils/styles';
 
 type Props = {
-  runCoins: number;
+  summary: RunSummary;
   onRestart: () => void;
   onHome: () => void;
 };
 
-export function GameOverScreen({ runCoins, onRestart, onHome }: Props) {
+export function GameOverScreen({ summary, onRestart, onHome }: Props) {
   const lastScore = useProgressStore((s) => s.lastScore);
   const bestScore = useProgressStore((s) => s.bestScore);
   const totalCoins = useProgressStore((s) => s.totalCoins);
 
   return (
     <SafeAreaView style={ui.screen}>
-      <View style={styles.content}>
-        <Text style={styles.title}>PARTIE TERMINÉE</Text>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} bounces={false}>
+        <Text style={styles.title}>RUN OVER</Text>
+        {summary.record ? <Text style={styles.record}>NEW RECORD!</Text> : null}
 
         <View style={styles.panel}>
           <Stat label="SCORE" value={String(lastScore)} />
-          <Stat label="PIÈCES GAGNÉES" value={`+${runCoins}`} accent />
-          <Stat label="MEILLEUR SCORE" value={String(bestScore)} />
-          <Stat label="TOTAL PIÈCES" value={String(totalCoins)} accent />
+          <Stat label="DISTANCE" value={`${summary.distance} m`} />
+          <Stat label="LEVEL" value={String(summary.level)} />
+          <Stat label="BEST COMBO" value={`x${summary.bestCombo}`} />
+          <Stat label="DUMBBELLS" value={`+${summary.coins}`} accent />
+          <Stat label="BEST SCORE" value={String(bestScore)} />
+          <Stat label="TOTAL DUMBBELLS" value={String(totalCoins)} accent />
         </View>
 
         <Pressable style={ui.primaryBtn} onPress={onRestart}>
-          <Text style={ui.primaryBtnText}>REJOUER</Text>
+          <Text style={ui.primaryBtnText}>PLAY AGAIN</Text>
         </Pressable>
         <Pressable style={ui.secondaryBtn} onPress={onHome}>
-          <Text style={ui.secondaryBtnText}>ACCUEIL</Text>
+          <Text style={ui.secondaryBtnText}>HOME</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -60,9 +65,13 @@ function Stat({
 }
 
 const styles = StyleSheet.create({
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
     width: '100%',
@@ -72,9 +81,20 @@ const styles = StyleSheet.create({
   title: {
     ...display,
     color: colors.yellow,
-    fontSize: 40,
+    fontSize: 36,
     textAlign: 'center',
-    marginBottom: spacing.sm,
+  },
+  record: {
+    ...display,
+    color: colors.black,
+    fontSize: 18,
+    textAlign: 'center',
+    backgroundColor: colors.yellow,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
   },
   panel: {
     backgroundColor: colors.panel,
@@ -82,7 +102,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 2,
     borderColor: colors.border,
-    gap: spacing.md,
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
   statRow: {
@@ -100,6 +120,6 @@ const styles = StyleSheet.create({
   statValue: {
     ...display,
     color: colors.white,
-    fontSize: 26,
+    fontSize: 22,
   },
 });

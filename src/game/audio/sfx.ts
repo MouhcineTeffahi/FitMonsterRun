@@ -32,6 +32,8 @@ const EVENT_SFX: Partial<Record<RunEvent, SfxName>> = {
   power: 'power',
   level: 'level',
   smash: 'smash',
+  slap: 'smash',
+  kick: 'smash',
   roof: 'land',
   platform: 'land',
 };

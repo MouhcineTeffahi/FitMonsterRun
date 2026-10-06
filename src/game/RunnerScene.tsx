@@ -49,6 +49,8 @@ const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
   land: 'spark',
   slide: 'dust',
   smash: 'smash',
+  slap: 'smash',
+  kick: 'smash',
   power: 'power',
   level: 'confetti',
 };
@@ -107,7 +109,7 @@ function Game({ skin, controls, onStats, onEvent, onGameOver, onReady, onPostFx 
     [],
   );
   const frame = useMemo<PlayerFrame>(
-    () => ({ airborne: false, runRate: 1, sliding: false, hitT: 99, dead: false, celebrate: false, x: 0, y: 0, vx: 0, ground: 0, power: 0, dz: 0 }),
+    () => ({ airborne: false, runRate: 1, sliding: false, hitT: 99, dead: false, celebrate: false, attack: 0 as const, attackSide: 1 as const, attackT: 99, x: 0, y: 0, vx: 0, ground: 0, power: 0, dz: 0 }),
     [],
   );
 
@@ -205,6 +207,9 @@ function Game({ skin, controls, onStats, onEvent, onGameOver, onReady, onPostFx 
     frame.vx = s.vx;
     frame.ground = s.ground;
     frame.power = s.stats.power;
+    frame.attack = s.attack;
+    frame.attackSide = s.attackSide;
+    frame.attackT = s.attackT;
     frame.dz = dz;
     player.current?.update(dt, frame);
 

@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 
-import type { ScreenId } from './src/data/types';
+import type { RunSummary, ScreenId } from './src/data/types';
 import { colors } from './src/data/theme';
 import { preloadSfx, setSfxEnabled } from './src/game/audio/sfx';
 import { ChallengesScreen } from './src/screens/ChallengesScreen';
@@ -17,7 +17,13 @@ import { useAppFonts } from './src/ui/fonts';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>('home');
-  const [runCoins, setRunCoins] = useState(0);
+  const [summary, setSummary] = useState<RunSummary>({
+    coins: 0,
+    distance: 0,
+    level: 1,
+    bestCombo: 0,
+    record: false,
+  });
   const hydrated = useProgressStore((s) => s.hydrated);
   const loadProgress = useProgressStore((s) => s.loadProgress);
   const resetRun = useProgressStore((s) => s.resetRun);
@@ -44,7 +50,7 @@ export default function App() {
 
   const startRun = () => {
     resetRun();
-    setRunCoins(0);
+    setSummary({ coins: 0, distance: 0, level: 1, bestCombo: 0, record: false });
     setScreen('game');
   };
   const home = () => setScreen('home');
@@ -62,14 +68,14 @@ export default function App() {
       ) : null}
       {screen === 'game' ? (
         <GameScreen
-          onGameOver={(coins) => {
-            setRunCoins(coins);
+          onGameOver={(next) => {
+            setSummary(next);
             setScreen('gameOver');
           }}
         />
       ) : null}
       {screen === 'gameOver' ? (
-        <GameOverScreen runCoins={runCoins} onRestart={startRun} onHome={home} />
+        <GameOverScreen summary={summary} onRestart={startRun} onHome={home} />
       ) : null}
       {screen === 'shop' ? <ShopScreen onBack={home} /> : null}
       {screen === 'challenges' ? <ChallengesScreen onBack={home} /> : null}

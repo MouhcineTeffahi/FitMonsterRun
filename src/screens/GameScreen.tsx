@@ -11,6 +11,7 @@ import Animated, {
 import { MISSIONS, type ChallengeStat } from '../data/challenges';
 import { getSkin } from '../data/skins';
 import { colors, MAX_ENERGY } from '../data/theme';
+import type { RunSummary } from '../data/types';
 import {
   RunnerScene,
   type PickupEvent,
@@ -27,9 +28,11 @@ import { SpeedLines } from '../ui/SpeedLines';
 import { Vignette } from '../ui/Vignette';
 
 type Props = {
-  /** Total coins earned this run (pickups + mission and level bonuses). */
-  onGameOver: (runCoins: number) => void;
+  /** Coins plus the stats shown on the game-over screen. */
+  onGameOver: (summary: RunSummary) => void;
 };
+
+type IntroStep = 3 | 2 | 1 | 'go' | null;
 
 const INITIAL_STATS: RunStats = {
   score: 0,
@@ -45,18 +48,23 @@ const INITIAL_STATS: RunStats = {
   levelGoal: levelGoalFor(1),
   roofs: 0,
   junkDodged: 0,
+  combo: 0,
+  bestCombo: 0,
 };
 
 type Toast = { text: string; color: string };
 
 const TOASTS: Partial<Record<PickupEvent, Toast>> = {
-  healthy: { text: 'SAIN ! +ÉNERGIE', color: colors.green },
-  protein: { text: 'PROTÉINE ! 💪', color: colors.protein },
-  hit: { text: 'MALBOUFFE !', color: colors.red },
-  roof: { text: 'SUR LE CAMION !', color: colors.yellow },
-  platform: { text: 'PLATEFORME !', color: '#00E5FF' },
-  power: { text: 'MODE POWER ! ⚡', color: colors.power },
-  smash: { text: 'SMASH !', color: '#FF7A45' },
+  healthy: { text: 'HEALTHY! +ENERGY', color: colors.green },
+  protein: { text: 'PROTEIN! 💪', color: colors.protein },
+  hit: { text: 'JUNK FOOD!', color: colors.red },
+  roof: { text: 'ON THE TRUCK!', color: colors.yellow },
+  platform: { text: 'PLATFORM!', color: '#00E5FF' },
+  power: { text: 'POWER MODE! ⚡', color: colors.power },
+  smash: { text: 'SMASH!', color: '#FF7A45' },
+  slap: { text: 'GO TRAIN!', color: '#FF8A3D' },
+  kick: { text: 'GO TRAIN!', color: '#FF8A3D' },
+  lowEnergy: { text: 'LOW ENERGY!', color: colors.red },
 };
 
 const HINT_TIME_MS = 7000;
@@ -80,6 +88,7 @@ export function GameScreen({ onGameOver }: Props) {
   const [ready, setReady] = useState(false);
   const [postFx, setPostFx] = useState(true);
   const [hint, setHint] = useState(true);
+  const [intro, setIntro] = useState<IntroStep>(null);
   const [levelDone, setLevelDone] = useState<{ level: number; score: number } | null>(null);
   const [missionIdx, setMissionIdx] = useState(0);
   const missionBase = useRef(0);
@@ -93,10 +102,13 @@ export function GameScreen({ onGameOver }: Props) {
     lane: 1,
     jumpQueued: false,
     slideQueued: false,
-    paused: false,
+    paused: true,
     celebrate: false,
   });
   const endedRef = useRef(false);
+  const introStarted = useRef(false);
+  const userPaused = useRef(false);
+  const introOn = useRef(true);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = useSharedValue(0);
@@ -112,9 +124,33 @@ export function GameScreen({ onGameOver }: Props) {
   }, [resetRun]);
 
   useEffect(() => {
-    controls.current.paused = paused || levelDone !== null;
+    if (!ready || introStarted.current) return;
+    introStarted.current = true;
+    setIntro(3);
+  }, [ready]);
+
+  useEffect(() => {
+    if (intro === null) return;
+    const ms = intro === 'go' ? 480 : 650;
+    const id = setTimeout(() => {
+      setIntro((cur) => {
+        if (cur === 3) return 2;
+        if (cur === 2) return 1;
+        if (cur === 1) return 'go';
+        return null;
+      });
+    }, ms);
+    return () => clearTimeout(id);
+  }, [intro]);
+
+  const counting = !ready || intro !== null || !introStarted.current;
+  userPaused.current = paused;
+  introOn.current = counting;
+
+  useEffect(() => {
+    controls.current.paused = paused || levelDone !== null || counting;
     controls.current.celebrate = levelDone !== null;
-  }, [paused, levelDone]);
+  }, [paused, levelDone, counting]);
 
   const showToast = useCallback((next: Toast, ms = 1400) => {
     setToast(next);
@@ -122,7 +158,7 @@ export function GameScreen({ onGameOver }: Props) {
     toastTimer.current = setTimeout(() => setToast(null), ms);
   }, []);
 
-  const blocked = () => controls.current.paused || endedRef.current;
+  const blocked = () => userPaused.current || controls.current.celebrate || endedRef.current;
 
   const moveLane = useCallback((dir: -1 | 1) => {
     if (blocked()) return;
@@ -140,7 +176,7 @@ export function GameScreen({ onGameOver }: Props) {
   }, []);
 
   const togglePause = useCallback(() => {
-    if (controls.current.celebrate || endedRef.current) return;
+    if (introOn.current || controls.current.celebrate || endedRef.current) return;
     setPaused((p) => !p);
   }, []);
 
@@ -181,7 +217,7 @@ export function GameScreen({ onGameOver }: Props) {
       const def = MISSIONS[missionIdxRef.current % MISSIONS.length];
       if (statValue(next, def.stat) - missionBase.current < def.target) return;
       bonusCoins.current += def.reward;
-      showToast({ text: `MISSION RÉUSSIE ! +${def.reward}`, color: colors.green }, 1800);
+      showToast({ text: `MISSION COMPLETE! +${def.reward}`, color: colors.green }, 1800);
       missionIdxRef.current += 1;
       const following = MISSIONS[missionIdxRef.current % MISSIONS.length];
       missionBase.current = statValue(next, following.stat);
@@ -216,6 +252,10 @@ export function GameScreen({ onGameOver }: Props) {
         setLevelDone({ level: levelsDone.current, score: statsRef.current.score });
         return;
       }
+      if (event === 'combo') {
+        showToast({ text: `COMBO x${statsRef.current.combo} !`, color: colors.yellowBright });
+        return;
+      }
       if (event === 'hit' || event === 'power') {
         flashColor.value = event === 'hit' ? 0 : 1;
         flash.value = withSequence(
@@ -240,6 +280,8 @@ export function GameScreen({ onGameOver }: Props) {
         currentDistance: final.distance,
         currentEnergy: final.energy,
       });
+      const previousBest = useProgressStore.getState().bestScore;
+      const record = Math.floor(final.score) > previousBest;
       finishRun();
       recordRun({
         score: final.score,
@@ -251,7 +293,13 @@ export function GameScreen({ onGameOver }: Props) {
       });
       const earned = final.coins + bonusCoins.current;
       if (earned > 0) addCoins(earned);
-      onGameOver(earned);
+      onGameOver({
+        coins: earned,
+        distance: Math.floor(final.distance),
+        level: final.level,
+        bestCombo: final.bestCombo,
+        record,
+      });
     },
     [addCoins, applyRunTick, finishRun, onGameOver, recordRun],
   );
@@ -304,10 +352,16 @@ export function GameScreen({ onGameOver }: Props) {
         <HUD stats={stats} mission={mission} paused={paused} onPause={togglePause} />
       )}
 
-      {hint && ready && !levelDone ? (
+      {intro !== null ? (
+        <View style={styles.intro} pointerEvents="none">
+          <Text style={styles.introText}>{intro === 'go' ? 'GO!' : intro}</Text>
+        </View>
+      ) : null}
+
+      {hint && ready && !levelDone && intro === null ? (
         <View style={styles.hint} pointerEvents="none">
           <Text style={styles.hintText}>
-            Gauche/droite : voie · Haut : sauter · Bas : glisser · Monte sur les camions !
+            Punch them: go train! · Slide to kick
           </Text>
         </View>
       ) : null}
@@ -323,7 +377,7 @@ export function GameScreen({ onGameOver }: Props) {
 
       {!ready ? (
         <View style={styles.loading} pointerEvents="none">
-          <Text style={styles.loadingText}>Chargement…</Text>
+          <Text style={styles.loadingText}>Loading…</Text>
         </View>
       ) : null}
 
@@ -331,10 +385,10 @@ export function GameScreen({ onGameOver }: Props) {
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>PAUSE</Text>
           <Pressable style={styles.pauseBtn} onPress={() => setPaused(false)}>
-            <Text style={styles.pauseBtnTextDark}>REPRENDRE</Text>
+            <Text style={styles.pauseBtnTextDark}>RESUME</Text>
           </Pressable>
           <Pressable style={[styles.pauseBtn, styles.quitBtn]} onPress={quit}>
-            <Text style={styles.pauseBtnText}>QUITTER</Text>
+            <Text style={styles.pauseBtnText}>QUIT</Text>
           </Pressable>
         </View>
       ) : null}
@@ -382,6 +436,19 @@ const styles = StyleSheet.create({
     textShadowColor: '#000',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
+  },
+  intro: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  introText: {
+    ...display,
+    color: colors.yellow,
+    fontSize: 72,
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 0,
   },
   hint: {
     position: 'absolute',

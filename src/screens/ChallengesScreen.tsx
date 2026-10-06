@@ -4,6 +4,7 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'rea
 import { DAILY_CHALLENGES, timeToReset, todayKey } from '../data/challenges';
 import { colors, radii, spacing } from '../data/theme';
 import { useProgressStore, type DailyState } from '../store/progressStore';
+import { DumbbellMark } from '../ui/DumbbellMark';
 import { display } from '../ui/fonts';
 import { ScreenHeader } from '../ui/ScreenHeader';
 
@@ -27,7 +28,7 @@ export function ChallengesScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScreenHeader title="DÉFIS QUOTIDIENS" onBack={onBack} coins={totalCoins} />
+      <ScreenHeader title="DAILY CHALLENGES" onBack={onBack} coins={totalCoins} />
       <ScrollView contentContainerStyle={styles.list}>
         {DAILY_CHALLENGES.map((c) => {
           const value = Math.floor(today.progress[c.stat] ?? 0);
@@ -58,7 +59,7 @@ export function ChallengesScreen({ onBack }: Props) {
                 </Pressable>
               ) : (
                 <View style={styles.reward}>
-                  <View style={styles.coin} />
+                  <DumbbellMark size={16} />
                   <Text style={styles.rewardText}>{c.reward}</Text>
                 </View>
               )}
@@ -67,7 +68,7 @@ export function ChallengesScreen({ onBack }: Props) {
         })}
 
         <View style={styles.resetBox}>
-          <Text style={styles.resetLabel}>NOUVEAU DÉFI DANS</Text>
+          <Text style={styles.resetLabel}>NEW CHALLENGE IN</Text>
           <Text style={styles.resetTime}>{countdown}</Text>
         </View>
       </ScrollView>
@@ -152,14 +153,6 @@ const styles = StyleSheet.create({
     ...display,
     color: colors.white,
     fontSize: 16,
-  },
-  coin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#FFC21A',
-    borderWidth: 2,
-    borderColor: '#FFE88A',
   },
   claimBtn: {
     backgroundColor: colors.yellow,

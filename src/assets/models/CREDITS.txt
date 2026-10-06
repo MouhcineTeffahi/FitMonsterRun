@@ -1,9 +1,15 @@
-All 3D models in this folder are CC0 (public domain).
+All 3D models in this folder are free for use as noted below.
 
-Kenney (www.kenney.nl) - Food Kit 2.0
+Kenney (www.kenney.nl) - Food Kit 2.0 — CC0
   burger (burger-cheese), donut (donut-sprinkles), fries, soda,
-  broccoli, chicken (meat-cooked), apple, protein (carton)
+  broccoli, chicken (meat-cooked), apple, protein (carton, unused in-run)
   Textures were embedded into each .glb with gltf-transform.
+
+protein-tub.glb <- "Protein Powder" by Zsky on Poly Pizza
+  https://poly.pizza/m/w9sWcWlV9i — Creative Commons Attribution (CC-BY)
+fat-guy.glb <- "Fatty" by Drummyfish on OpenGameArt
+  https://opengameart.org/content/fatty — Public Domain (CC0)
+  Converted OBJ+diffuse → GLB; in-game tee/shorts overlays added.
 
 fit-monster.glb <- Quaternius "Universal Base Characters" Superhero Male (CC0),
   restyled by scripts/build-character.mjs into the Fit Monster: smoothed mask
@@ -15,7 +21,7 @@ fit-monster-anims.glb <- Quaternius "Universal Animation Library" (CC0):
   Both mirrored at codeberg.org/jamesonBradfield/Quaternius_IK_Rigged_with_animations.
 
 Everything else in the world (trucks, road, buildings, palms, street props,
-water bottle, coins) is procedural geometry built in src/game/. Sound effects
+water bottle, dumbbells) is procedural geometry built in src/game/. Sound effects
 in src/assets/sounds are synthesised by scripts/make-sfx.mjs (original).
 
 src/assets/fonts/LilitaOne-Regular.ttf <- Lilita One by Juan Montoreano
