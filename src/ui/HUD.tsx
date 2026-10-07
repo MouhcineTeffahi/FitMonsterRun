@@ -1,15 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
 import { colors, MAX_ENERGY, radii } from '../data/theme';
-import { levelGoalFor, POWER_CHARGE, POWER_TIME, type RunStats } from '../game/sim/runSim';
+import { COMBO_WINDOW, levelGoalFor, POWER_CHARGE, POWER_TIME, type RunStats } from '../game/sim/runSim';
+import { BuffRings } from './BuffRings';
 import { DumbbellMark } from './DumbbellMark';
 import { display } from './fonts';
 import { MissionBox } from './MissionBox';
@@ -45,21 +47,62 @@ export function HUD({ stats, mission, paused, onPause, space }: Props) {
   const levelSpan = Math.max(1, stats.levelGoal - levelStart);
   const levelPct = Math.max(0, Math.min(1, (stats.distance - levelStart) / levelSpan));
   const levelLeft = Math.max(0, Math.ceil(stats.levelGoal - stats.distance));
+  const levelClose = levelPct >= 0.82;
   const pulse = useSharedValue(1);
+  const comboPop = useSharedValue(1);
+  const coinPop = useSharedValue(1);
+  const levelPulse = useSharedValue(1);
+  const lastCoins = useRef(stats.coins);
 
   useEffect(() => {
     if (!low) {
-      pulse.value = withTiming(1, { duration: 120 });
+      pulse.value = withTiming(1, { duration: 90 });
       return;
     }
     pulse.value = withRepeat(
-      withSequence(withTiming(0.4, { duration: 260 }), withTiming(1, { duration: 260 })),
+      withSequence(withTiming(0.28, { duration: 140 }), withTiming(1, { duration: 140 })),
       -1,
       false,
     );
   }, [low, pulse]);
 
-  const energyStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  useEffect(() => {
+    if (stats.combo < 2) {
+      comboPop.value = 1;
+      return;
+    }
+    comboPop.value = withSequence(
+      withTiming(1.28, { duration: 70 }),
+      withSpring(1, { damping: 8, stiffness: 240 }),
+    );
+  }, [stats.combo, comboPop]);
+
+  useEffect(() => {
+    if (stats.coins > lastCoins.current) {
+      coinPop.value = withSequence(withTiming(1.16, { duration: 70 }), withTiming(1, { duration: 160 }));
+    }
+    lastCoins.current = stats.coins;
+  }, [stats.coins, coinPop]);
+
+  useEffect(() => {
+    if (!levelClose) {
+      levelPulse.value = withTiming(1, { duration: 120 });
+      return;
+    }
+    levelPulse.value = withRepeat(
+      withSequence(withTiming(1, { duration: 220 }), withTiming(0.55, { duration: 220 })),
+      -1,
+      false,
+    );
+  }, [levelClose, levelPulse]);
+
+  const energyStyle = useAnimatedStyle(() => ({
+    opacity: pulse.value,
+    transform: [{ scale: 0.92 + pulse.value * 0.08 }],
+  }));
+  const comboStyle = useAnimatedStyle(() => ({ transform: [{ scale: comboPop.value }] }));
+  const coinStyle = useAnimatedStyle(() => ({ transform: [{ scale: coinPop.value }] }));
+  const levelFillStyle = useAnimatedStyle(() => ({ opacity: 0.72 + levelPulse.value * 0.28 }));
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -70,7 +113,7 @@ export function HUD({ stats, mission, paused, onPause, space }: Props) {
               onPress={onPause}
               style={styles.pauseBtn}
               accessibilityRole="button"
-              accessibilityLabel={paused ? 'Resume' : 'Pause'}
+              accessibilityLabel={paused ? 'Reprendre' : 'Pause'}
             >
               <View style={styles.pauseBar} />
               <View style={styles.pauseBar} />
@@ -87,18 +130,22 @@ export function HUD({ stats, mission, paused, onPause, space }: Props) {
               />
             ))}
           </View>
-          {stats.combo >= 2 ? (
-            <View style={styles.comboBadge}>
-              <Text style={styles.comboText}>COMBO x{stats.combo}</Text>
-            </View>
+          {stats.comboMult >= 2 ? (
+            <Animated.View style={[styles.comboBadge, stats.comboMult >= 5 && styles.comboHot, comboStyle]}>
+              <Text style={styles.comboText}>COMBO x{stats.comboMult}</Text>
+              <View style={styles.comboTrack}>
+                <View style={[styles.comboFill, { width: `${Math.max(6, (stats.comboT / COMBO_WINDOW) * 100)}%` }]} />
+              </View>
+            </Animated.View>
           ) : null}
+          <BuffRings power={stats.power} magnet={stats.magnet} shield={stats.shield} boost={stats.boost} />
         </View>
 
         <View style={styles.rightCol} pointerEvents="none">
-          <View style={styles.pill}>
+          <Animated.View style={[styles.pill, coinStyle]}>
             <Text style={styles.pillText}>{stats.coins}</Text>
             <DumbbellMark size={28} />
-          </View>
+          </Animated.View>
           <View style={[styles.pill, styles.pillSmall]}>
             <Text style={styles.distText}>{Math.floor(stats.distance)} m</Text>
           </View>
@@ -109,9 +156,24 @@ export function HUD({ stats, mission, paused, onPause, space }: Props) {
       <View style={styles.levelRow} pointerEvents="none">
         <Text style={styles.levelName}>LV. {stats.level}</Text>
         <View style={styles.levelTrack}>
-          <View style={[styles.levelFill, { width: `${levelPct * 100}%` }]} />
+          <Animated.View
+            style={[
+              styles.levelFill,
+              {
+                width: `${levelPct * 100}%`,
+                backgroundColor: levelClose ? colors.green : powered ? colors.power : colors.yellow,
+              },
+              levelFillStyle,
+            ]}
+          />
         </View>
-        <Text style={styles.levelLeft}>{levelLeft} m</Text>
+        <Text style={[styles.levelLeft, levelClose && styles.levelLeftHot]}>
+          {levelClose
+            ? 'BIENTÔT'
+            : levelLeft >= 1000
+              ? `${(levelLeft / 1000).toFixed(1)} km`
+              : `${levelLeft} m`}
+        </Text>
       </View>
       {space ? (
         <View style={styles.spaceChip} pointerEvents="none">
@@ -120,7 +182,7 @@ export function HUD({ stats, mission, paused, onPause, space }: Props) {
       ) : null}
 
       <Animated.View style={[styles.energyWrap, energyStyle]} pointerEvents="none">
-        <View style={styles.energyTrack}>
+        <View style={[styles.energyTrack, low && styles.energyTrackLow]}>
           <View
             style={[
               styles.energyFill,
@@ -129,13 +191,13 @@ export function HUD({ stats, mission, paused, onPause, space }: Props) {
           />
           <View style={styles.energyShine} />
         </View>
-        <Text style={styles.energyLabel}>ENERGY</Text>
+        <Text style={[styles.energyLabel, low && styles.energyLabelLow]}>{low ? 'FAIBLE !' : 'ÉNERGIE'}</Text>
       </Animated.View>
 
       <View style={styles.bottom} pointerEvents="none">
         {powered ? (
           <MissionBox
-            label="POWER MODE!"
+            label="MODE POWER !"
             fill={stats.power / POWER_TIME}
             icon="⚡"
             accent={colors.power}
@@ -220,10 +282,26 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFF6B0',
   },
+  comboHot: {
+    backgroundColor: colors.power,
+    borderColor: '#FFFFFF',
+  },
   comboText: {
     ...display,
     color: colors.black,
     fontSize: 14,
+  },
+  comboTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    overflow: 'hidden',
+    marginTop: 2,
+  },
+  comboFill: {
+    height: '100%',
+    backgroundColor: colors.black,
+    borderRadius: 2,
   },
   levelRow: {
     marginTop: 10,
@@ -270,8 +348,11 @@ const styles = StyleSheet.create({
     ...display,
     color: colors.white,
     fontSize: 12,
-    width: 52,
+    width: 58,
     textAlign: 'right',
+  },
+  levelLeftHot: {
+    color: colors.green,
   },
   pips: {
     flexDirection: 'row',
@@ -348,6 +429,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
+  energyTrackLow: {
+    borderColor: colors.red,
+    borderWidth: 3,
+  },
   energyFill: {
     width: '100%',
     borderRadius: 9,
@@ -367,6 +452,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textShadowColor: '#000',
     textShadowRadius: 3,
+  },
+  energyLabelLow: {
+    color: colors.red,
+    fontSize: 13,
   },
   bottom: {
     position: 'absolute',

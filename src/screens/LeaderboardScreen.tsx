@@ -18,14 +18,18 @@ const MEDALS = ['#FFD54F', '#CFD8DC', '#E0A06A'];
 export function LeaderboardScreen({ onBack }: Props) {
   const bestScore = useProgressStore((s) => s.bestScore);
   const topScores = useProgressStore((s) => s.topScores);
+  const dailyBoard = useProgressStore((s) => s.dailyBoard);
+  const weeklyBoard = useProgressStore((s) => s.weeklyBoard);
   const [expanded, setExpanded] = useState(false);
+  const [period, setPeriod] = useState<'all' | 'day' | 'week'>('all');
 
+  const myScore = period === 'day' ? (dailyBoard.scores[0] ?? 0) : period === 'week' ? (weeklyBoard.scores[0] ?? 0) : bestScore;
   const rows = useMemo(
     () =>
-      [...RIVALS.map((r) => ({ ...r, me: false })), { name: 'You', score: bestScore, me: true }].sort(
+      [...RIVALS.map((r) => ({ ...r, me: false })), { name: 'Toi', score: myScore, me: true }].sort(
         (a, b) => b.score - a.score,
       ),
-    [bestScore],
+    [myScore],
   );
   const myRank = rows.findIndex((r) => r.me);
   const visible = expanded
@@ -34,7 +38,16 @@ export function LeaderboardScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScreenHeader title="LEADERBOARD" onBack={onBack} />
+      <ScreenHeader title="CLASSEMENT" onBack={onBack} />
+      <View style={styles.periods}>
+        {(['all', 'day', 'week'] as const).map((p) => (
+          <Pressable key={p} style={[styles.period, period === p && styles.periodOn]} onPress={() => setPeriod(p)}>
+            <Text style={[styles.periodText, period === p && styles.periodTextOn]}>
+              {p === 'all' ? 'GÉNÉRAL' : p === 'day' ? 'JOUR' : 'SEMAINE'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <ScrollView contentContainerStyle={styles.list}>
         {visible.map((r) => {
           const rank = rows.indexOf(r);
@@ -57,12 +70,12 @@ export function LeaderboardScreen({ onBack }: Props) {
         })}
 
         <Pressable style={styles.moreBtn} onPress={() => setExpanded((e) => !e)} accessibilityRole="button">
-          <Text style={styles.moreText}>{expanded ? 'SEE LESS' : 'SEE MORE'}</Text>
+          <Text style={styles.moreText}>{expanded ? 'VOIR MOINS' : 'VOIR PLUS'}</Text>
         </Pressable>
 
         {topScores.length > 0 ? (
           <View style={styles.mine}>
-            <Text style={styles.mineTitle}>YOUR BEST RUNS</Text>
+            <Text style={styles.mineTitle}>TES MEILLEURES RUNS</Text>
             {topScores.map((s, i) => (
               <View key={`${s}-${i}`} style={styles.mineRow}>
                 <Text style={styles.mineRank}>#{i + 1}</Text>
@@ -80,6 +93,34 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  periods: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  period: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.panel,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodOn: {
+    backgroundColor: colors.yellow,
+    borderColor: '#FFE88A',
+  },
+  periodText: {
+    ...display,
+    color: colors.white,
+    fontSize: 13,
+  },
+  periodTextOn: {
+    color: colors.black,
   },
   list: {
     padding: spacing.md,

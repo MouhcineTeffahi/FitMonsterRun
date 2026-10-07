@@ -40,7 +40,7 @@ const WHITE = '#FFFFFF';
 export const SKINS: SkinDef[] = [
   {
     id: 'classic',
-    name: 'Classic Yellow',
+    name: 'Classique',
     price: 0,
     primary: '#FCB202',
     secondary: '#101014',
@@ -58,8 +58,8 @@ export const SKINS: SkinDef[] = [
       sole: WHITE,
       wrist: WHITE,
       piping: WHITE,
-      emblem: WHITE,
-      harness: WHITE,
+      emblem: YELLOW,
+      harness: YELLOW,
       eyes: WHITE,
       sock: '#FFD84A',
       roughness: 0.42,
@@ -68,7 +68,7 @@ export const SKINS: SkinDef[] = [
   },
   {
     id: 'street',
-    name: 'Street Mode',
+    name: 'Street',
     price: 500,
     primary: '#2B2B2B',
     secondary: '#FCB202',
@@ -96,7 +96,7 @@ export const SKINS: SkinDef[] = [
   },
   {
     id: 'beast',
-    name: 'Beast Mode',
+    name: 'Beast',
     price: 1000,
     primary: '#101014',
     secondary: '#FCB202',
@@ -124,7 +124,7 @@ export const SKINS: SkinDef[] = [
   },
   {
     id: 'champion',
-    name: 'Champion Mode',
+    name: 'Champion',
     price: 1500,
     primary: '#D4AF37',
     secondary: '#101014',

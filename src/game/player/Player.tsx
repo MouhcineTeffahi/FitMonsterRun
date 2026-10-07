@@ -14,8 +14,13 @@ export type PlayerFrame = MonsterFrame & {
   ground: number;
   /** Seconds of power mode left. */
   power: number;
+  /** 0 lean, 1 fat from junk food. */
+  bulk: number;
+  onBike: boolean;
   /** Road scrolled this frame (moves the trail with the world). */
   dz: number;
+  shield: number;
+  level: number;
 };
 
 export type PlayerHandle = {
@@ -94,18 +99,25 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ skin }, 
 
         const lift = Math.max(0, f.y - f.ground);
         shadow.position.set(f.x, f.ground + 0.03, PLAYER_Z);
-        shadow.scale.setScalar(1 / (1 + lift * 0.35));
+        shadow.scale.setScalar((1 + f.bulk * 0.45) / (1 + lift * 0.35));
         (shadow.material as THREE.MeshBasicMaterial).opacity = 0.32 / (1 + lift * 0.5);
 
-        // Power mode: pulsing aura shell, glow and a ribbon trail.
+        // Power mode / creatine shield / high-level aura.
         const powered = f.power > 0 && !f.dead;
-        const fadeOut = Math.min(1, f.power / 0.8);
+        const shielded = f.shield > 0 && !f.dead;
+        const leveled = f.level >= 4 && !f.dead;
+        const fadeOut = Math.min(1, (powered ? f.power : f.shield) / 0.8) || (leveled ? 0.55 : 0);
         const pulse = 0.55 + Math.sin(performance.now() * 0.012) * 0.2;
+        const grow = 1 + Math.min(0.1, Math.max(0, f.level - 1) * 0.025);
+        root.scale.setScalar(grow);
         if (monster.aura) {
-          monster.aura.visible = powered;
-          (monster.aura.material as THREE.MeshBasicMaterial).opacity = powered ? 0.8 * pulse * fadeOut : 0;
+          monster.aura.visible = powered || shielded || leveled;
+          const auraMat = monster.aura.material as THREE.MeshBasicMaterial;
+          auraMat.color.set(shielded ? '#FFE082' : powered ? '#FFD23F' : '#7CFF6B');
+          auraMat.opacity = (powered || shielded ? 0.8 : 0.35) * pulse * Math.max(fadeOut, leveled ? 0.4 : 0);
         }
-        (glow.material as THREE.SpriteMaterial).opacity = powered ? 0.22 * pulse * fadeOut : 0;
+        (glow.material as THREE.SpriteMaterial).opacity = powered || shielded ? 0.22 * pulse * fadeOut : leveled ? 0.1 : 0;
+        (glow.material as THREE.SpriteMaterial).color.set(shielded ? '#FFE082' : '#FFC400');
 
         const { hx, hy, hz, pos, col } = trail;
         if (powered && !trail.on) {

@@ -29,8 +29,8 @@ type Burst = { count: number; color: [number, number, number][]; speed: number; 
 const BURSTS: Record<BurstKind, Burst> = {
   spark: { count: 14, color: [[1, 0.62, 0.12]], speed: 4.5, up: 3, life: 0.45, gravity: -16 },
   // Coin sparkle: hot white/gold glints that hang in the air.
-  coin: { count: 12, color: [[1.6, 1.3, 0.4], [1.8, 1.8, 1.5]], speed: 2.4, up: 2.2, life: 0.55, gravity: -2 },
-  healthy: { count: 18, color: [[0.35, 1.3, 0.45]], speed: 3, up: 3, life: 0.6, gravity: -5 },
+  coin: { count: 10, color: [[1.6, 1.3, 0.4], [1.8, 1.8, 1.5]], speed: 2.6, up: 2.4, life: 0.58, gravity: -2 },
+  healthy: { count: 10, color: [[0.35, 1.3, 0.45]], speed: 3, up: 3, life: 0.6, gravity: -5 },
   protein: { count: 20, color: [[0.4, 0.8, 1.5]], speed: 3.4, up: 3.4, life: 0.65, gravity: -5 },
   hit: { count: 22, color: [[1.4, 0.25, 0.25]], speed: 5.5, up: 3, life: 0.5, gravity: -12 },
   roof: { count: 20, color: [[1.3, 1.0, 0.15]], speed: 5, up: 1.2, life: 0.5, gravity: -3 },

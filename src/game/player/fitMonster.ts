@@ -13,6 +13,92 @@ const REGION_KEYS: (keyof Outfit)[] = [
   'shoe', 'sole', 'wrist', 'piping', 'emblem', 'harness', 'eyes', 'sock',
 ];
 
+const R = {
+  SKIN: 0, HEAD: 1, TORSO: 2, ARM: 3, HAND: 4, SHORTS: 5, LEGGINGS: 6, CALF: 7,
+  SHOE: 8, SOLE: 9, WRIST: 10, PIPING: 11, EMBLEM: 12, HARNESS: 13, EYES: 14, SOCK: 15,
+} as const;
+
+function smooth01(t: number) {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  return x * x * (3 - 2 * x);
+}
+
+/** 1 between b..c, fading in a..b and out c..d. */
+function band(y: number, a: number, b: number, c: number, d: number) {
+  return smooth01((y - a) / (b - a)) * (1 - smooth01((y - c) / (d - c)));
+}
+
+/**
+ * Inflate along bind normals so the mesh stays solid. Thin outfit shells
+ * (harness / piping) are left alone — stretching those made gold spikes.
+ */
+const fatOut = { x: 0, y: 0, z: 0 };
+
+function fatAmount(region: number, y: number, z: number) {
+  if (
+    region === R.SHOE ||
+    region === R.SOLE ||
+    region === R.HARNESS ||
+    region === R.PIPING ||
+    region === R.EMBLEM ||
+    region === R.EYES ||
+    region === R.WRIST ||
+    region === R.HAND
+  ) {
+    return 0;
+  }
+  if (region === R.TORSO) {
+    const gut = band(y, 0.92, 1.02, 1.22, 1.4) * smooth01((z + 0.06) / 0.2);
+    return 0.06 + 0.12 * gut;
+  }
+  if (region === R.SHORTS) return 0.09;
+  if (region === R.LEGGINGS) return 0.08;
+  if (region === R.CALF || region === R.SOCK) return 0.055;
+  if (region === R.ARM) return 0.06;
+  if (region === R.HEAD) return 0.03;
+  if (region === R.SKIN) return 0.04;
+  return 0;
+}
+
+function fatPoint(
+  x: number,
+  y: number,
+  z: number,
+  nx: number,
+  ny: number,
+  nz: number,
+  region: number,
+  fat: number,
+) {
+  fatOut.x = x;
+  fatOut.y = y;
+  fatOut.z = z;
+  if (fat < 0.001) return fatOut;
+  const amount = fatAmount(region, y, z) * fat;
+  fatOut.x += nx * amount;
+  fatOut.y += ny * amount * 0.35;
+  fatOut.z += nz * amount;
+  if (region === R.TORSO) {
+    const dx = x / 0.28;
+    const dy = (y - 1.06) / 0.22;
+    const front = smooth01((z + 0.04) / 0.2);
+    const gut = Math.exp(-(dx * dx + dy * dy)) * front;
+    fatOut.z += fat * 0.22 * gut;
+    fatOut.y -= fat * 0.05 * gut;
+  }
+  const dx = fatOut.x - x;
+  const dy = fatOut.y - y;
+  const dz = fatOut.z - z;
+  const len = Math.hypot(dx, dy, dz);
+  if (len > 0.22) {
+    const k = 0.22 / len;
+    fatOut.x = x + dx * k;
+    fatOut.y = y + dy * k;
+    fatOut.z = z + dz * k;
+  }
+  return fatOut;
+}
+
 /** `run`: gameplay state machine. `pose`: "thinking" idle. `hero`: frozen mid-sprint for the menu. */
 export type MonsterMode = 'run' | 'pose' | 'hero';
 
@@ -31,6 +117,10 @@ export type MonsterFrame = {
   attackSide?: 1 | -1;
   /** Seconds since the slap or kick started. */
   attackT?: number;
+  /** 0 lean, 1 stuffed. Omitted on menus. */
+  bulk?: number;
+  /** Riding a bicycle. */
+  onBike?: boolean;
 };
 
 export type FitMonster = {
@@ -94,7 +184,7 @@ function makeAura(body: THREE.SkinnedMesh) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * uAuraWidth;');
   };
   mat.customProgramCacheKey = () => 'fm-aura';
-  const aura = new THREE.SkinnedMesh(body.geometry, mat);
+  const aura = new THREE.SkinnedMesh(body.geometry.clone(), mat);
   aura.bind(body.skeleton, body.bindMatrix);
   aura.position.copy(body.position);
   aura.quaternion.copy(body.quaternion);
@@ -143,7 +233,7 @@ const POSE = {
 /** Lifts the model by the shoe sole thickness so it never sinks into the road. */
 const SOLE_LIFT = 0.012;
 
-type RunState = 'run' | 'air' | 'slide' | 'dead' | 'celebrate';
+type RunState = 'run' | 'air' | 'slide' | 'dead' | 'celebrate' | 'bike';
 
 export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number): FitMonster {
   const [gltf, anims] = useLoader(GLTFLoader, [modelUrl('fitMonster'), modelUrl('fitMonsterAnims')]) as GLTF[];
@@ -154,6 +244,7 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
     const bones: Record<string, THREE.Object3D> = {};
     const materials: THREE.Material[] = [];
     const skinned: THREE.SkinnedMesh[] = [];
+    const bodyMats: THREE.MeshStandardMaterial[] = [];
     model.traverse((o) => {
       if ((o as THREE.Bone).isBone) bones[o.name] = o;
       const mesh = o as THREE.SkinnedMesh;
@@ -165,14 +256,16 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
         mesh.material = new THREE.MeshBasicMaterial({ color: outfit.eyes, toneMapped: false });
       } else {
         paint(mesh, outfit);
-        mesh.material = new THREE.MeshStandardMaterial({
+        const mat = new THREE.MeshStandardMaterial({
           vertexColors: true,
           normalMap: src.normalMap,
-          // Softer muscle relief reads cleaner on small phone screens.
+          // Muscle relief fades as the runner gets a gut.
           normalScale: new THREE.Vector2(0.6, 0.6),
           roughness: outfit.roughness,
           metalness: outfit.metalness,
         });
+        mesh.material = mat;
+        bodyMats.push(mat);
         if (mesh.isSkinnedMesh) skinned.push(mesh);
       }
       materials.push(mesh.material as THREE.Material);
@@ -192,6 +285,30 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
 
     const aura = mode === 'run' && skinned[0] ? makeAura(skinned[0]) : null;
     if (aura) materials.push(aura.material as THREE.Material);
+
+    const fatMeshes = skinned.map((mesh) => {
+      const geo = mesh.geometry;
+      const srcPos = geo.getAttribute('position');
+      const srcNrm = geo.getAttribute('normal');
+      const region = geo.getAttribute('_region') ?? geo.getAttribute('_REGION');
+      const base = new Float32Array(srcPos.count * 3);
+      const normals = new Float32Array(srcPos.count * 3);
+      for (let i = 0; i < srcPos.count; i++) {
+        base[i * 3] = srcPos.getX(i);
+        base[i * 3 + 1] = srcPos.getY(i);
+        base[i * 3 + 2] = srcPos.getZ(i);
+        if (srcNrm) {
+          normals[i * 3] = srcNrm.getX(i);
+          normals[i * 3 + 1] = srcNrm.getY(i);
+          normals[i * 3 + 2] = srcNrm.getZ(i);
+        }
+      }
+      // Quantized GLB positions cannot be written back; a float copy stays intact.
+      const live = new THREE.BufferAttribute(base.slice(), 3);
+      live.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('position', live);
+      return { mesh, base, live, normals, region };
+    });
 
     const s = height / 1.81;
     model.scale.setScalar(s);
@@ -218,7 +335,10 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
     const dead = once(action('Death01'));
     const hit = once(action('Hit_Chest'));
     const celebrate = action('Dance_Loop');
-    const actions: Record<RunState, THREE.AnimationAction | null> = { run, air, slide, dead, celebrate };
+    // Idle is a standing rest pose — a better sit base than Crouch_Fwd (that clip
+    // dumped him on his back behind the bike). Limbs are posed with IK after mix.
+    const bike = idle;
+    const actions: Record<RunState, THREE.AnimationAction | null> = { run, air, slide, dead, celebrate, bike };
 
     if (mode === 'run') run?.play();
     else if (mode === 'pose') idle?.play();
@@ -233,13 +353,26 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
     let t = 0;
     let lastHitT = 99;
     let hitLeft = 0;
+    let shownBulk = 0;
+    let appliedBulk = -1;
+    let fatWait = 0;
     const target = new THREE.Vector3();
     const toWorld = (p: THREE.Vector3) => model.localToWorld(target.copy(p));
 
     const update = (dt: number, f?: MonsterFrame) => {
       t += dt;
       if (mode === 'run' && f) {
-        const next: RunState = f.dead ? 'dead' : f.celebrate ? 'celebrate' : f.sliding ? 'slide' : f.airborne ? 'air' : 'run';
+        const next: RunState = f.dead
+          ? 'dead'
+          : f.celebrate
+            ? 'celebrate'
+            : f.onBike
+              ? 'bike'
+              : f.sliding
+                ? 'slide'
+                : f.airborne
+                  ? 'air'
+                  : 'run';
         if (next !== state) {
           const from = actions[state];
           const to = actions[next];
@@ -248,6 +381,7 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
             to.reset().fadeIn(next === 'slide' ? 0.06 : next === 'dead' ? 0.08 : 0.12).play();
             if (next === 'slide') to.setEffectiveTimeScale(1.95);
             if (next === 'dead') to.setEffectiveTimeScale(1.25);
+            if (next === 'bike') to.setEffectiveTimeScale(0.15);
           }
           from?.fadeOut(0.1);
           if (next === 'dead') hit?.fadeOut(0.05);
@@ -264,9 +398,81 @@ export function useFitMonster(skin: SkinDef, mode: MonsterMode, height: number):
           if (hitLeft <= 0) hit?.fadeOut(0.18);
         }
         run?.setEffectiveTimeScale(0.85 * f.runRate);
+        bike?.setEffectiveTimeScale(0.15);
+        // Same sit pose on the ground and in a hop — extra pitch folded him over the bars.
+        model.rotation.x = f.onBike ? 0.16 : 0;
+        model.position.y = (SOLE_LIFT + (f.onBike ? 0.06 : 0)) * s;
+        object.rotation.x = 0;
       }
       mixer.update(dt);
-      if (mode === 'run' && f?.attack && (f.attackT ?? 99) < 0.34) {
+      if (mode === 'run') {
+        const targetBulk = Math.max(0, Math.min(1, f?.bulk ?? 0));
+        shownBulk += (targetBulk - shownBulk) * Math.min(1, dt * 1.6);
+        fatWait += dt;
+        // Rewrite the mesh a few times a second, not every bite — that froze the run.
+        const fatReady = fatWait >= 0.14 || Math.abs(shownBulk - appliedBulk) > 0.12;
+        if (fatReady && Math.abs(shownBulk - appliedBulk) > 0.02) {
+          fatWait = 0;
+          appliedBulk = shownBulk;
+          const muscle = 0.6 * (1 - shownBulk);
+          for (const mat of bodyMats) mat.normalScale.set(muscle, muscle);
+          for (const { live, base, normals, region } of fatMeshes) {
+            const arr = live.array as Float32Array;
+            for (let i = 0; i < live.count; i++) {
+              const o = i * 3;
+              const r = region ? Math.round(region.getX(i)) : -1;
+              if (r < 0) {
+                arr[o] = base[o];
+                arr[o + 1] = base[o + 1];
+                arr[o + 2] = base[o + 2];
+                continue;
+              }
+              const p = fatPoint(
+                base[o],
+                base[o + 1],
+                base[o + 2],
+                normals[o],
+                normals[o + 1],
+                normals[o + 2],
+                r,
+                shownBulk,
+              );
+              arr[o] = p.x;
+              arr[o + 1] = p.y;
+              arr[o + 2] = p.z;
+            }
+            live.needsUpdate = true;
+          }
+        }
+      }
+      if (mode === 'run' && f?.onBike) {
+        object.updateMatrixWorld(true);
+        const b = bones;
+        const pedal = t * 9;
+        const spine = b.spine_02 ?? b.spine_01;
+        const chest = b.spine_03 ?? b.spine_02;
+        if (spine && chest) {
+          aim(spine, chest, toWorld(slapElbow.set(0, 1.42, 0.22)));
+        }
+        for (const side of ['l', 'r'] as const) {
+          const sx = side === 'r' ? -1 : 1;
+          const phase = pedal + (side === 'r' ? Math.PI : 0);
+          const thigh = b[`thigh_${side}`];
+          const shin = b[`calf_${side}`] ?? b[`shin_${side}`];
+          const foot = b[`foot_${side}`];
+          if (thigh && shin) {
+            aim(thigh, shin, toWorld(slapElbow.set(sx * 0.13, 0.58 + Math.sin(phase) * 0.1, 0.2 + Math.cos(phase) * 0.06)));
+            if (foot) aim(shin, foot, toWorld(slapHand.set(sx * 0.12, 0.34 + Math.sin(phase) * 0.14, 0.08 + Math.cos(phase) * 0.1)));
+          }
+          const upper = b[`upperarm_${side}`];
+          const lower = b[`lowerarm_${side}`];
+          const hand = b[`hand_${side}`];
+          if (upper && lower) {
+            aim(upper, lower, toWorld(slapElbow.set(sx * 0.22, 1.12, 0.32)));
+            if (hand) aim(lower, hand, toWorld(slapHand.set(sx * 0.3, 1.08, 0.52)));
+          }
+        }
+      } else if (mode === 'run' && f?.attack && (f.attackT ?? 99) < 0.34) {
         object.updateMatrixWorld(true);
         const swing = Math.sin(Math.min(1, (f.attackT ?? 0) / 0.28) * Math.PI);
         const side = f.attackSide === 1 ? 'r' : 'l';

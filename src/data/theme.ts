@@ -43,4 +43,4 @@ export const spacing = {
 } as const;
 
 export const MAX_ENERGY = 100;
-export const SPEED_INTERVAL_MS = 30_000;
+export const SPEED_INTERVAL_MS = 26_000;

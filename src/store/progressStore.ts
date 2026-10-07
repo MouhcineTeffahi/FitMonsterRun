@@ -14,11 +14,42 @@ import {
 } from '../data/playerColors';
 import { MAX_ENERGY } from '../data/theme';
 import { DAILY_CHALLENGES, todayKey, type ChallengeStat } from '../data/challenges';
-import { DEFAULT_SPACE, FREE_SPACES, getSpace, isSpaceId, type SpaceId } from '../data/spaces';
+import { DEFAULT_SPACE, SPACES, getSpace, isSpaceId, type SpaceId } from '../data/spaces';
+import {
+  DEFAULT_ACCESSORY,
+  DEFAULT_UNLOCKED_ACCESSORIES,
+  STAT_MAX,
+  getAccessory,
+  isAccessoryId,
+  nextStatCost,
+  parseUpgrades,
+  type AccessoryId,
+  type StatId,
+  type Upgrades,
+} from '../data/shop';
+import {
+  ACHIEVEMENTS,
+  CHEST_EVERY,
+  LOGIN_REWARDS,
+  parseBoard,
+  parseGhost,
+  parseLogin,
+  rollChestCoins,
+  tickLogin,
+  weekKey,
+  type BoardSlice,
+  type GhostSample,
+  type LoginState,
+} from '../data/retention';
 
 const STORAGE_KEY = '@fit_monster_run/progress_v1';
+const SAVE_VERSION = 2;
+/** Tester bankroll so every place can be opened. */
+const TEST_COINS = 99_999;
+const ALL_SPACES: SpaceId[] = SPACES.map((s) => s.id);
 
 type PersistedSlice = {
+  v: number;
   totalCoins: number;
   selectedSkin: SkinId;
   unlockedSkins: SkinId[];
@@ -32,6 +63,17 @@ type PersistedSlice = {
   unlockedSpaces: SpaceId[];
   /** Player paint channels over the selected skin. */
   playerColors: PlayerColors;
+  login: LoginState;
+  upgrades: Upgrades;
+  selectedAccessory: AccessoryId;
+  unlockedAccessories: AccessoryId[];
+  runsSinceChest: number;
+  pendingChest: boolean;
+  tutorialDone: boolean;
+  achievements: string[];
+  dailyBoard: BoardSlice;
+  weeklyBoard: BoardSlice;
+  ghost: GhostSample[] | null;
 };
 
 export type DailyState = {
@@ -41,7 +83,11 @@ export type DailyState = {
 };
 
 /** End-of-run counters credited to the daily challenges. */
-export type RunRecord = Record<ChallengeStat, number> & { score: number };
+export type RunRecord = Record<ChallengeStat, number> & {
+  score: number;
+  bestCombo?: number;
+  ghost?: GhostSample[] | null;
+};
 
 function freshDaily(): DailyState {
   return { date: todayKey(), progress: {}, claimed: [] };
@@ -61,6 +107,7 @@ type RunSlice = {
 type ProgressState = PersistedSlice &
   RunSlice & {
     hydrated: boolean;
+    lastChestReward: number;
     addCoins: (amount: number) => void;
     spendCoins: (amount: number) => boolean;
     unlockSkin: (skinId: SkinId) => boolean;
@@ -78,6 +125,13 @@ type ProgressState = PersistedSlice &
     chooseSpace: (id: SpaceId) => boolean;
     setPlayerColor: (slot: ColorSlot, hex: string) => void;
     resetPlayerColors: () => void;
+    claimLogin: () => number;
+    buyAccessory: (id: AccessoryId) => boolean;
+    selectAccessory: (id: AccessoryId) => void;
+    upgradeStat: (id: StatId) => boolean;
+    openChest: () => number;
+    completeTutorial: () => void;
+    unlockAchievement: (id: string) => void;
   };
 
 function isSkinId(value: unknown): value is SkinId {
@@ -91,6 +145,7 @@ function isSkinId(value: unknown): value is SkinId {
 
 function persistedPayload(state: PersistedSlice): PersistedSlice {
   return {
+    v: SAVE_VERSION,
     totalCoins: state.totalCoins,
     selectedSkin: state.selectedSkin,
     unlockedSkins: state.unlockedSkins,
@@ -101,6 +156,17 @@ function persistedPayload(state: PersistedSlice): PersistedSlice {
     selectedSpace: state.selectedSpace,
     unlockedSpaces: state.unlockedSpaces,
     playerColors: state.playerColors,
+    login: state.login,
+    upgrades: state.upgrades,
+    selectedAccessory: state.selectedAccessory,
+    unlockedAccessories: state.unlockedAccessories,
+    runsSinceChest: state.runsSinceChest,
+    pendingChest: state.pendingChest,
+    tutorialDone: state.tutorialDone,
+    achievements: state.achievements,
+    dailyBoard: state.dailyBoard,
+    weeklyBoard: state.weeklyBoard,
+    ghost: state.ghost,
   };
 }
 
@@ -120,27 +186,70 @@ function parseDaily(raw: unknown): DailyState {
 
 function parseSpaces(parsed: Partial<PersistedSlice>): Pick<PersistedSlice, 'selectedSpace' | 'unlockedSpaces'> {
   const stored = Array.isArray(parsed.unlockedSpaces) ? parsed.unlockedSpaces.filter(isSpaceId) : [];
-  const unlockedSpaces = [...new Set([...FREE_SPACES, ...stored])];
+  const unlockedSpaces = [...new Set([...ALL_SPACES, ...stored])];
   const selectedSpace = isSpaceId(parsed.selectedSpace) && unlockedSpaces.includes(parsed.selectedSpace) ? parsed.selectedSpace : DEFAULT_SPACE;
   return { selectedSpace, unlockedSpaces };
 }
 
+function parseAccessories(parsed: Partial<PersistedSlice>): Pick<PersistedSlice, 'selectedAccessory' | 'unlockedAccessories'> {
+  const stored = Array.isArray(parsed.unlockedAccessories)
+    ? parsed.unlockedAccessories.filter(isAccessoryId)
+    : [...DEFAULT_UNLOCKED_ACCESSORIES];
+  const unlockedAccessories = stored.includes(DEFAULT_ACCESSORY)
+    ? stored
+    : [DEFAULT_ACCESSORY, ...stored];
+  const selectedAccessory =
+    isAccessoryId(parsed.selectedAccessory) && unlockedAccessories.includes(parsed.selectedAccessory)
+      ? parsed.selectedAccessory
+      : DEFAULT_ACCESSORY;
+  return { selectedAccessory, unlockedAccessories };
+}
+
+function migrate(raw: unknown): PersistedSlice {
+  const parsed = (raw && typeof raw === 'object' ? raw : {}) as Partial<PersistedSlice>;
+  const unlocked = Array.isArray(parsed.unlockedSkins)
+    ? parsed.unlockedSkins.filter(isSkinId)
+    : [...DEFAULT_UNLOCKED];
+  const selected = isSkinId(parsed.selectedSkin) ? parsed.selectedSkin : DEFAULT_SKIN;
+  const achievements = Array.isArray(parsed.achievements)
+    ? parsed.achievements.filter((id) => typeof id === 'string')
+    : [];
+  return {
+    v: SAVE_VERSION,
+    totalCoins: Math.max(TEST_COINS, Math.floor(Number(parsed.totalCoins) || 0)),
+    selectedSkin: unlocked.includes(selected) ? selected : DEFAULT_SKIN,
+    unlockedSkins: unlocked.includes(DEFAULT_SKIN) ? unlocked : [DEFAULT_SKIN, ...unlocked],
+    bestScore: Math.max(0, Math.floor(Number(parsed.bestScore) || 0)),
+    soundEnabled: parsed.soundEnabled !== false,
+    daily: parseDaily(parsed.daily),
+    topScores: Array.isArray(parsed.topScores)
+      ? parsed.topScores.map(Number).filter(Number.isFinite).slice(0, 5)
+      : [],
+    ...parseSpaces(parsed),
+    playerColors: parsePlayerColors(parsed.playerColors),
+    login: parseLogin(parsed.login),
+    upgrades: parseUpgrades(parsed.upgrades),
+    ...parseAccessories(parsed),
+    runsSinceChest: Math.max(0, Math.floor(Number(parsed.runsSinceChest) || 0)),
+    pendingChest: parsed.pendingChest === true,
+    tutorialDone: parsed.tutorialDone === true,
+    achievements,
+    dailyBoard: parseBoard(parsed.dailyBoard, todayKey()),
+    weeklyBoard: parseBoard(parsed.weeklyBoard, weekKey()),
+    ghost: parseGhost(parsed.ghost),
+  };
+}
+
+const defaults: PersistedSlice = migrate({});
+
 export const useProgressStore = create<ProgressState>((set, get) => ({
-  totalCoins: 0,
-  selectedSkin: DEFAULT_SKIN,
-  unlockedSkins: [...DEFAULT_UNLOCKED],
-  bestScore: 0,
+  ...defaults,
   lastScore: 0,
-  soundEnabled: true,
-  daily: freshDaily(),
-  topScores: [],
-  selectedSpace: DEFAULT_SPACE,
-  unlockedSpaces: [...FREE_SPACES],
-  playerColors: { ...DEFAULT_PLAYER_COLORS },
   currentEnergy: MAX_ENERGY,
   currentScore: 0,
   currentDistance: 0,
   hydrated: false,
+  lastChestReward: 0,
 
   addCoins: (amount) => {
     if (amount <= 0) return;
@@ -201,32 +310,12 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        set({ hydrated: true });
+        set({ ...migrate({}), hydrated: true });
+        void get().saveProgress();
         return;
       }
-      const parsed = JSON.parse(raw) as Partial<PersistedSlice>;
-      const unlocked = Array.isArray(parsed.unlockedSkins)
-        ? parsed.unlockedSkins.filter(isSkinId)
-        : [...DEFAULT_UNLOCKED];
-      const selected = isSkinId(parsed.selectedSkin)
-        ? parsed.selectedSkin
-        : DEFAULT_SKIN;
-      set({
-        totalCoins: Math.max(0, Math.floor(Number(parsed.totalCoins) || 0)),
-        selectedSkin: unlocked.includes(selected) ? selected : DEFAULT_SKIN,
-        unlockedSkins: unlocked.includes(DEFAULT_SKIN)
-          ? unlocked
-          : [DEFAULT_SKIN, ...unlocked],
-        bestScore: Math.max(0, Math.floor(Number(parsed.bestScore) || 0)),
-        soundEnabled: parsed.soundEnabled !== false,
-        daily: parseDaily(parsed.daily),
-        topScores: Array.isArray(parsed.topScores)
-          ? parsed.topScores.map(Number).filter(Number.isFinite).slice(0, 5)
-          : [],
-        ...parseSpaces(parsed),
-        playerColors: parsePlayerColors(parsed.playerColors),
-        hydrated: true,
-      });
+      set({ ...migrate(JSON.parse(raw)), hydrated: true });
+      void get().saveProgress();
     } catch {
       set({ hydrated: true });
     }
@@ -286,7 +375,37 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
     const topScores = score > 0
       ? [...get().topScores, score].sort((a, b) => b - a).slice(0, 5)
       : get().topScores;
-    set({ daily: { ...daily, progress }, topScores });
+    const dayKey = todayKey();
+    const wk = weekKey();
+    const dailyBoard = parseBoard(get().dailyBoard, dayKey);
+    const weeklyBoard = parseBoard(get().weeklyBoard, wk);
+    if (score > 0) {
+      dailyBoard.scores = [...dailyBoard.scores, score].sort((a, b) => b - a).slice(0, 5);
+      weeklyBoard.scores = [...weeklyBoard.scores, score].sort((a, b) => b - a).slice(0, 5);
+    }
+    const runsSinceChest = get().runsSinceChest + 1;
+    const pendingChest = get().pendingChest || runsSinceChest >= CHEST_EVERY;
+    const achievements = [...get().achievements];
+    const earn = (id: string) => {
+      if (!achievements.includes(id) && ACHIEVEMENTS.some((a) => a.id === id)) achievements.push(id);
+    };
+    earn('first-run');
+    if ((run.bestCombo ?? 0) >= 5) earn('combo-5');
+    if (run.distance >= 1000) earn('km-1');
+    if (score >= 5000) earn('score-5k');
+    if (get().login.streak >= 3) earn('streak-3');
+    const ghost =
+      score >= get().bestScore && run.ghost && run.ghost.length >= 4 ? run.ghost : get().ghost;
+    set({
+      daily: { ...daily, progress },
+      topScores,
+      dailyBoard,
+      weeklyBoard,
+      runsSinceChest: pendingChest ? 0 : runsSinceChest,
+      pendingChest,
+      achievements,
+      ghost,
+    });
     void get().saveProgress();
   },
 
@@ -313,5 +432,76 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
     set({ selectedSpace: id });
     void get().saveProgress();
     return true;
+  },
+
+  claimLogin: () => {
+    const login = tickLogin(get().login);
+    if (login.claimedDay === login.cycleDay) return 0;
+    const reward = LOGIN_REWARDS[login.cycleDay - 1] ?? LOGIN_REWARDS[0];
+    set((s) => ({
+      login: { ...login, claimedDay: login.cycleDay },
+      totalCoins: s.totalCoins + reward,
+    }));
+    void get().saveProgress();
+    return reward;
+  },
+
+  buyAccessory: (id) => {
+    const { unlockedAccessories, totalCoins } = get();
+    if (unlockedAccessories.includes(id)) return true;
+    const cost = getAccessory(id).price;
+    if (totalCoins < cost) return false;
+    set({
+      totalCoins: totalCoins - cost,
+      unlockedAccessories: [...unlockedAccessories, id],
+      selectedAccessory: id,
+    });
+    void get().saveProgress();
+    return true;
+  },
+
+  selectAccessory: (id) => {
+    if (!get().unlockedAccessories.includes(id)) return;
+    set({ selectedAccessory: id });
+    void get().saveProgress();
+  },
+
+  upgradeStat: (id) => {
+    const level = get().upgrades[id];
+    const cost = nextStatCost(level);
+    if (cost === null || level >= STAT_MAX) return false;
+    if (get().totalCoins < cost) return false;
+    set((s) => ({
+      totalCoins: s.totalCoins - cost,
+      upgrades: { ...s.upgrades, [id]: level + 1 },
+    }));
+    void get().saveProgress();
+    return true;
+  },
+
+  openChest: () => {
+    if (!get().pendingChest) return 0;
+    const reward = rollChestCoins();
+    set((s) => ({
+      pendingChest: false,
+      runsSinceChest: 0,
+      totalCoins: s.totalCoins + reward,
+      lastChestReward: reward,
+    }));
+    void get().saveProgress();
+    return reward;
+  },
+
+  completeTutorial: () => {
+    if (get().tutorialDone) return;
+    set({ tutorialDone: true });
+    void get().saveProgress();
+  },
+
+  unlockAchievement: (id) => {
+    if (get().achievements.includes(id)) return;
+    if (!ACHIEVEMENTS.some((a) => a.id === id)) return;
+    set((s) => ({ achievements: [...s.achievements, id] }));
+    void get().saveProgress();
   },
 }));

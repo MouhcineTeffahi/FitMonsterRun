@@ -2,7 +2,7 @@ All 3D models in this folder are free for use as noted below.
 
 Kenney (www.kenney.nl) - Food Kit 2.0 — CC0
   burger (burger-cheese), donut (donut-sprinkles), fries, soda,
-  broccoli, chicken (meat-cooked), apple, protein (carton, unused in-run)
+  broccoli, chicken (meat-cooked), banana, apple, protein (carton, unused in-run)
   Textures were embedded into each .glb with gltf-transform.
 
 protein-tub.glb <- "Protein Powder" by Zsky on Poly Pizza

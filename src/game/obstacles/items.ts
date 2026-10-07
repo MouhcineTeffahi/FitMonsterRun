@@ -80,54 +80,134 @@ export function halo(color: string, size: number, opacity = 0.75) {
   return s;
 }
 
-/** Wide whey tub: black jar, gold rim, red band — gym powder, not a bottle. */
-export function proteinShaker(): THREE.Group {
+/** 5×7 caps used for the PROTEIN carton label. */
+const LABEL_FONT: Record<string, string[]> = {
+  P: ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
+  R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+  T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+  E: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
+  I: ['01110', '00100', '00100', '00100', '00100', '00100', '01110'],
+  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+  C: ['01110', '10001', '10000', '10000', '10000', '10001', '01110'],
+  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
+};
+
+/** Bright label map so PROTEIN stays readable in run lighting. */
+function labelTexture(text: string) {
+  const W = 256;
+  const H = 96;
+  const data = new Uint8Array(W * H * 4);
+  const put = (x: number, y: number, r: number, g: number, b: number) => {
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    const i = (y * W + x) * 4;
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+    data[i + 3] = 255;
+  };
+  const fill = (x0: number, y0: number, w: number, h: number, r: number, g: number, b: number) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) put(x, y, r, g, b);
+    }
+  };
+  fill(0, 0, W, H, 21, 101, 192);
+  fill(0, 0, W, 10, 255, 213, 79);
+  fill(0, H - 10, W, 10, 255, 213, 79);
+  const letters = text.split('');
+  const px = 6;
+  const gap = 5;
+  const glyphW = 5 * px;
+  const wordW = letters.length * glyphW + (letters.length - 1) * gap;
+  let ox = Math.floor((W - wordW) / 2);
+  const oy = Math.floor((H - 7 * px) / 2);
+  for (const ch of letters) {
+    const rows = LABEL_FONT[ch];
+    if (rows) {
+      rows.forEach((row, gy) => {
+        for (let gx = 0; gx < row.length; gx++) {
+          if (row[gx] !== '1') continue;
+          fill(ox + gx * px, oy + (6 - gy) * px, px, px, 255, 255, 255);
+        }
+      });
+    }
+    ox += glyphW + gap;
+  }
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const cartonLabels: Partial<Record<string, THREE.DataTexture>> = {};
+
+function gymCarton(label: string, body: string, band: string, trim: string): THREE.Group {
   const g = new THREE.Group();
-  const black = new THREE.MeshStandardMaterial({ color: '#14161C', roughness: 0.45 });
-  const gold = new THREE.MeshStandardMaterial({
-    color: '#D4A017',
-    roughness: 0.28,
-    metalness: 0.55,
-    emissive: '#6A4A00',
-    emissiveIntensity: 0.2,
+  const cream = new THREE.MeshStandardMaterial({
+    color: body,
+    roughness: 0.38,
+    emissive: body,
+    emissiveIntensity: 0.22,
   });
-  const cream = new THREE.MeshStandardMaterial({ color: '#F2EDE4', roughness: 0.4 });
-  const red = new THREE.MeshStandardMaterial({
-    color: '#C62828',
-    roughness: 0.4,
-    emissive: '#5A1010',
-    emissiveIntensity: 0.15,
+  const stripe = new THREE.MeshStandardMaterial({
+    color: band,
+    roughness: 0.32,
+    emissive: band,
+    emissiveIntensity: 0.28,
+  });
+  const gold = new THREE.MeshStandardMaterial({
+    color: trim,
+    roughness: 0.3,
+    metalness: 0.35,
+    emissive: trim,
+    emissiveIntensity: 0.22,
+  });
+  const ink = new THREE.MeshBasicMaterial({
+    map: (cartonLabels[label] ??= labelTexture(label)),
+    toneMapped: false,
   });
 
-  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, y: number) => {
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, y: number, x = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat);
-    m.position.y = y;
+    m.position.set(x, y, z);
     m.castShadow = true;
     g.add(m);
     return m;
   };
 
-  // Wide squat tub body.
-  add(new THREE.CylinderGeometry(0.32, 0.3, 0.55, 28), black, 0.28);
-  // Gold band under the lid.
-  add(new THREE.CylinderGeometry(0.325, 0.325, 0.08, 28), gold, 0.58);
-  // Red nutrition band near the bottom.
-  add(new THREE.CylinderGeometry(0.322, 0.305, 0.12, 28), red, 0.14);
-  // Cream title block on the front.
-  const title = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, 0.04), cream);
-  title.position.set(0, 0.36, 0.3);
-  title.castShadow = true;
-  g.add(title);
-  // Small gold logo mark above the title.
-  const logo = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.03), gold);
-  logo.position.set(-0.1, 0.48, 0.31);
-  g.add(logo);
-  // Flat screw-top lid.
-  add(new THREE.CylinderGeometry(0.34, 0.34, 0.1, 28), black, 0.68);
-  add(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 28), black, 0.74);
+  add(new THREE.BoxGeometry(0.78, 0.72, 0.5), cream, 0.4);
+  add(new THREE.BoxGeometry(0.82, 0.14, 0.54), stripe, 0.83);
+  add(new THREE.BoxGeometry(0.7, 0.04, 0.52), gold, 0.91);
+  add(new THREE.BoxGeometry(0.8, 0.1, 0.52), gold, 0.08);
+  for (const side of [1, -1] as const) {
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.28), ink);
+    face.position.set(0, 0.42, side * 0.26);
+    if (side < 0) face.rotation.y = Math.PI;
+    g.add(face);
+    const flank = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.28), ink);
+    flank.position.set(side * 0.4, 0.42, 0);
+    flank.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    g.add(flank);
+  }
 
-  g.scale.setScalar(1.35);
+  g.scale.setScalar(1.28);
   return g;
+}
+
+/** Cream whey carton with a PROTEIN label — gym powder, not a black blob. */
+export function proteinBox(): THREE.Group {
+  return gymCarton('PROTEIN', '#F7F1E6', '#1565C0', '#F0C94A');
+}
+
+export function creatineBox(): THREE.Group {
+  return gymCarton('CREA', '#FFF4C4', '#C9A227', '#FFE082');
+}
+
+export function preworkBox(): THREE.Group {
+  return gymCarton('PRE', '#3A1020', '#FF3D6E', '#FF8AAA');
 }
 
 /** Water bottle (no CC0 model in the kit): clear blue body, white cap and label. */
@@ -308,4 +388,76 @@ export function slackerFigure(shirt = '#E23B3B'): THREE.Group {
 
   g.userData.walk = { body, legs, arms } satisfies WalkRig;
   return g;
+}
+
+export type BikeRig = { wheels: [THREE.Group, THREE.Group]; crank: THREE.Group };
+
+/** Street bicycle. Built wide enough to read from behind the runner. */
+export function streetBike(): THREE.Group {
+  const root = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: '#E23B3B', metalness: 0.38, roughness: 0.32 });
+  const chrome = new THREE.MeshStandardMaterial({ color: '#D0D6DE', metalness: 0.82, roughness: 0.22 });
+  const rubber = new THREE.MeshStandardMaterial({ color: '#1A1A1E', roughness: 0.72 });
+  const leather = new THREE.MeshStandardMaterial({ color: '#3A2A1C', roughness: 0.58 });
+
+  const add = (
+    parent: THREE.Object3D,
+    geo: THREE.BufferGeometry,
+    mat: THREE.Material,
+    x: number,
+    y: number,
+    z: number,
+    rx = 0,
+    ry = 0,
+    rz = 0,
+  ) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, rz);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
+  };
+
+  const makeWheel = (z: number) => {
+    const g = new THREE.Group();
+    g.position.set(0, 0.4, z);
+    add(g, new THREE.TorusGeometry(0.4, 0.07, 8, 18), rubber, 0, 0, 0, 0, Math.PI / 2, 0);
+    add(g, new THREE.CylinderGeometry(0.07, 0.07, 0.12, 10), chrome, 0, 0, 0, 0, 0, Math.PI / 2);
+    for (let i = 0; i < 8; i++) {
+      const sp = add(g, new THREE.BoxGeometry(0.03, 0.72, 0.02), chrome, 0, 0, 0);
+      sp.rotation.x = (i / 8) * Math.PI;
+    }
+    root.add(g);
+    return g;
+  };
+
+  const rear = makeWheel(0.52);
+  const front = makeWheel(-0.58);
+  // Twin tubes so the frame has width from the camera. Saddle sits under the
+  // rider (z≈0.1); bars are in front (negative Z, down the road).
+  for (const x of [-0.05, 0.05]) {
+    add(root, new THREE.CylinderGeometry(0.038, 0.038, 0.9, 8), paint, x, 0.72, -0.04, Math.PI / 2.4, 0, 0);
+    add(root, new THREE.CylinderGeometry(0.032, 0.032, 0.72, 8), paint, x, 0.92, 0.02, Math.PI / 2, 0, 0);
+    add(root, new THREE.CylinderGeometry(0.03, 0.03, 0.62, 8), paint, x, 0.68, 0.28, -0.55, 0, 0);
+    add(root, new THREE.CylinderGeometry(0.03, 0.03, 0.72, 8), chrome, x, 0.7, -0.32, 0.42, 0, 0);
+  }
+  add(root, new THREE.CylinderGeometry(0.04, 0.04, 0.42, 8), chrome, 0, 0.88, 0.12, 0, 0, 0);
+  add(root, new THREE.BoxGeometry(0.24, 0.08, 0.32), leather, 0, 1.04, 0.1);
+  add(root, new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8), chrome, 0, 1.08, -0.5, 0.18, 0, 0);
+  add(root, new THREE.CylinderGeometry(0.032, 0.032, 0.88, 8), chrome, 0, 1.14, -0.54, 0, 0, Math.PI / 2);
+  add(root, new THREE.CylinderGeometry(0.045, 0.045, 0.16, 8), rubber, 0.4, 1.14, -0.54, 0, 0, Math.PI / 2);
+  add(root, new THREE.CylinderGeometry(0.045, 0.045, 0.16, 8), rubber, -0.4, 1.14, -0.54, 0, 0, Math.PI / 2);
+
+  const crank = new THREE.Group();
+  crank.position.set(0, 0.38, 0);
+  add(crank, new THREE.BoxGeometry(0.22, 0.05, 0.05), chrome, 0, 0, 0);
+  add(crank, new THREE.BoxGeometry(0.05, 0.32, 0.05), chrome, 0.1, 0.12, 0);
+  add(crank, new THREE.BoxGeometry(0.05, 0.32, 0.05), chrome, -0.1, -0.12, 0);
+  add(crank, new THREE.BoxGeometry(0.12, 0.04, 0.06), leather, 0.12, 0.28, 0);
+  add(crank, new THREE.BoxGeometry(0.12, 0.04, 0.06), leather, -0.12, -0.28, 0);
+  root.add(crank);
+
+  root.userData.bike = { wheels: [rear, front], crank } satisfies BikeRig;
+  return root;
 }

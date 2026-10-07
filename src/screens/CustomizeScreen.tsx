@@ -42,12 +42,12 @@ export function CustomizeScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={ui.screen}>
-      <ScreenHeader title="CUSTOMIZE" onBack={onBack} coins={totalCoins} />
+      <ScreenHeader title="COULEURS" onBack={onBack} coins={totalCoins} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.stage}>
           <View style={[styles.stageGlow, { backgroundColor: `${playerColors.body}33` }]} />
           <MonsterShowcase skin={preview} style={styles.showcase} />
-          <Text style={styles.stageHint}>TAP A SWATCH · LIVE PREVIEW</Text>
+          <Text style={styles.stageHint}>APPUIE SUR UNE TEINTE · APERÇU LIVE</Text>
         </View>
 
         <View style={styles.slots}>
@@ -68,7 +68,7 @@ export function CustomizeScreen({ onBack }: Props) {
           })}
         </View>
 
-        <Text style={styles.section}>{COLOR_SLOTS.find((s) => s.id === slot)?.label} COLOR</Text>
+        <Text style={styles.section}>{COLOR_SLOTS.find((s) => s.id === slot)?.label}</Text>
         <View style={styles.swatches}>
           {SWATCHES[slot].map((hex) => {
             const selected = playerColors[slot].toLowerCase() === hex.toLowerCase();
@@ -93,10 +93,10 @@ export function CustomizeScreen({ onBack }: Props) {
           onPress={resetPlayerColors}
           accessibilityRole="button"
         >
-          <Text style={ui.secondaryBtnText}>RESET TO CLASSIC</Text>
+          <Text style={ui.secondaryBtnText}>RETOUR CLASSIQUE</Text>
         </Pressable>
         <Pressable style={ui.primaryBtn} onPress={onBack} accessibilityRole="button">
-          <Text style={ui.primaryBtnText}>DONE</Text>
+          <Text style={ui.primaryBtnText}>OK</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

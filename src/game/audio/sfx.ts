@@ -8,7 +8,9 @@ const SOURCES = {
   land: require('../../assets/sounds/land.wav'),
   slide: require('../../assets/sounds/slide.wav'),
   hit: require('../../assets/sounds/hit.wav'),
+  /** Broccoli / chicken / banana pickups. */
   healthy: require('../../assets/sounds/healthy.wav'),
+  /** Protein carton pickup (charges power mode). */
   protein: require('../../assets/sounds/protein.wav'),
   power: require('../../assets/sounds/power.wav'),
   level: require('../../assets/sounds/level.wav'),
@@ -21,8 +23,17 @@ const SOURCES = {
 export type SfxName = keyof typeof SOURCES;
 
 /** Small round-robin pool per sound so rapid coins can overlap. */
-const VOICES: Partial<Record<SfxName, number>> = { coin: 3 };
-const VOLUME: Partial<Record<SfxName, number>> = { coin: 0.5, land: 0.5, slide: 0.6 };
+const VOICES: Partial<Record<SfxName, number>> = { coin: 4, slap: 2, hit: 2, protein: 2 };
+const VOLUME: Partial<Record<SfxName, number>> = {
+  coin: 0.58,
+  land: 0.5,
+  slide: 0.65,
+  hit: 1,
+  slap: 0.95,
+  smash: 0.9,
+  power: 0.95,
+  protein: 0.85,
+};
 
 const EVENT_SFX: Partial<Record<RunEvent, SfxName>> = {
   coin: 'coin',
@@ -44,7 +55,14 @@ const EVENT_SFX: Partial<Record<RunEvent, SfxName>> = {
   roof: 'land',
   platform: 'land',
   nearMiss: 'coin',
-  combo: 'protein',
+  combo: 'power',
+  bike: 'jump',
+  lowEnergy: 'boing',
+  speedup: 'level',
+  gymZone: 'level',
+  creatine: 'power',
+  prework: 'protein',
+  magnet: 'protein',
 };
 
 type Pool = { players: AudioPlayer[]; next: number };

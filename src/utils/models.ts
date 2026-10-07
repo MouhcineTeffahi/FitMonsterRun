@@ -11,6 +11,7 @@ const MODULES = {
   soda: require('../assets/models/soda.glb'),
   broccoli: require('../assets/models/broccoli.glb'),
   chicken: require('../assets/models/chicken.glb'),
+  banana: require('../assets/models/banana.glb'),
   apple: require('../assets/models/apple.glb'),
   protein: require('../assets/models/protein.glb'),
   /** Free Poly Pizza protein tub (Zsky, CC-BY). */

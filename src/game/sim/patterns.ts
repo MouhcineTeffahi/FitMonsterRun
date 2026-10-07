@@ -39,10 +39,10 @@ export const PLATFORM_SWAY = LANE_X[1] - LANE_X[0];
 export const OVERHEAD_BOTTOM = 1.1;
 export const OVERHEAD_TOP = 3.1;
 
-export type Kind3D = 'truck' | 'platform' | 'ramp' | 'barrier' | 'overhead' | 'coin' | 'healthy' | 'slap';
+export type Kind3D = 'truck' | 'platform' | 'ramp' | 'barrier' | 'overhead' | 'coin' | 'healthy' | 'slap' | 'bike';
 
 export type JunkVariant = 'burger' | 'donut' | 'fries' | 'soda';
-export type HealthyVariant = 'broccoli' | 'chicken' | 'apple' | 'whey' | 'water';
+export type HealthyVariant = 'broccoli' | 'chicken' | 'banana' | 'whey' | 'water' | 'creatine' | 'prework';
 export type Variant3D =
   | TruckVariant
   | 'platform'
@@ -52,11 +52,12 @@ export type Variant3D =
   | 'overhead'
   | 'coin'
   | 'slacker'
+  | 'bike'
   | JunkVariant
   | HealthyVariant;
 
 export const JUNK: readonly JunkVariant[] = ['burger', 'donut', 'fries', 'soda'];
-export const HEALTHY: readonly HealthyVariant[] = ['broccoli', 'chicken', 'apple', 'water'];
+export const HEALTHY: readonly HealthyVariant[] = ['broccoli', 'chicken', 'banana', 'banana', 'water'];
 
 export const POOL_SIZES: Record<Variant3D, number> = {
   container: 6,
@@ -74,10 +75,13 @@ export const POOL_SIZES: Record<Variant3D, number> = {
   soda: 3,
   broccoli: 3,
   chicken: 3,
-  apple: 3,
+  banana: 5,
   whey: 4,
   water: 3,
+  creatine: 3,
+  prework: 3,
   slacker: 8,
+  bike: 4,
 };
 
 export const SLOT_COUNT = 84;
@@ -250,30 +254,46 @@ export type PatternId =
   | 'oncoming'
   | 'slackers'
   | 'coinSnake'
-  | 'conga';
+  | 'conga'
+  | 'bikes'
+  | 'weave'
+  | 'proteinRush'
+  | 'snackHop'
+  | 'gymZone';
 
 const WEIGHTS: [PatternId, number][] = [
   ['truck', 14],
-  ['barrierArc', 10],
+  ['barrierArc', 12],
   ['overheads', 10],
-  ['twoTrucks', 10],
-  ['truckWall', 9],
-  ['walkway', 9],
+  ['twoTrucks', 11],
+  ['truckWall', 10],
+  ['walkway', 8],
   ['movingPlatform', 8],
-  ['mixed', 9],
-  ['wheyBarriers', 7],
-  ['vans', 8],
-  ['oncoming', 8],
-  ['slackers', 22],
+  ['mixed', 10],
+  ['wheyBarriers', 5],
+  ['vans', 9],
+  ['oncoming', 9],
+  ['slackers', 18],
   ['coinSnake', 6],
   ['conga', 6],
+  ['bikes', 11],
 ];
 
 /** Walls, doubles, and oncoming trucks wait until the runner has some speed. */
 const LATE_PATTERNS: ReadonlySet<PatternId> = new Set(['truckWall', 'twoTrucks', 'oncoming']);
 
+/** Extra mid-run spice — only mixed in after the easy opening stretch. */
+const MID_WEIGHTS: [PatternId, number][] = [
+  ['weave', 14],
+  ['proteinRush', 9],
+  ['snackHop', 12],
+];
+
 export function choosePattern(distance = Infinity): PatternId {
-  const pool = distance < 420 ? WEIGHTS.filter(([id]) => !LATE_PATTERNS.has(id)) : WEIGHTS;
+  const pool =
+    distance < 420
+      ? WEIGHTS.filter(([id]) => !LATE_PATTERNS.has(id))
+      : WEIGHTS.concat(MID_WEIGHTS);
   let sum = 0;
   for (const [, w] of pool) sum += w;
   let r = Math.random() * sum;
@@ -303,8 +323,10 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       const ramp = Math.random() < 0.65;
       truck(slots, lane, z, bigTruck(), ramp, ramp);
       coinRow(slots, a, z, 5);
+      if (Math.random() < 0.55) place(slots, 'healthy', 'banana', a, z - 12, 0.9);
       if (Math.random() < 0.6) place(slots, 'healthy', pick(HEALTHY), b, z - 4, 0.9);
       if (Math.random() < 0.7) place(slots, 'slap', 'slacker', b, z - 10, 0, 0, WALK_SPEED);
+      if (Math.random() < 0.4) place(slots, 'bike', 'bike', a, z - 14, 0);
       break;
     }
     case 'barrierArc': {
@@ -368,6 +390,7 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       place(slots, 'healthy', 'whey', lane, z, 0.9);
       place(slots, 'barrier', pick(JUNK), a, z, 0);
       place(slots, 'barrier', pick(JUNK), b, z, 0);
+      place(slots, 'healthy', 'banana', lane, z - 8, 0.9);
       break;
     }
     case 'vans': {
@@ -377,7 +400,7 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
         const arc = Math.sin((i / 4) * Math.PI) * 1.4;
         place(slots, 'coin', 'coin', lane, z + 3 - i * 2.1, TRUCKS.van.height + 0.6 + arc);
       }
-      if (Math.random() < 0.6) truck(slots, a, z - 6, 'van', false, false);
+      if (Math.random() < 0.7) truck(slots, a, z - 6, 'van', false, false);
       place(slots, 'healthy', pick(HEALTHY), b, z - 3, 0.9);
       break;
     }
@@ -393,6 +416,7 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       // Breather: a coin trail weaving across all three lanes, with a whey at the end.
       const weave: LaneIndex[] = [1, 1, 2, 2, 2, 1, 0, 0, 0, 1, 2, 2, 2, 1];
       weave.forEach((l, i) => place(slots, 'coin', 'coin', l, z - i * 2.1, 0.9));
+      place(slots, 'healthy', 'banana', weave[6], z - 12.6, 0.9);
       place(slots, 'healthy', 'whey', randomLane(), z - 31, 0.9);
       break;
     }
@@ -412,12 +436,72 @@ export function spawnPattern(slots: Slot[], id: PatternId): number {
       if (Math.random() < 0.7) place(slots, 'healthy', pick(HEALTHY), b, z - 5, 0.9);
       break;
     }
+    case 'bikes': {
+      // A free bicycle in one lane. Run into it to hop on and ride.
+      place(slots, 'bike', 'bike', lane, z, 0);
+      coinRow(slots, a, z + 1, 5);
+      if (Math.random() < 0.55) place(slots, 'healthy', pick(HEALTHY), b, z - 6, 0.9);
+      break;
+    }
+    case 'weave': {
+      // Lane-change drill: junk, then a slide, then a van — coins mark the path.
+      place(slots, 'barrier', pick(JUNK), lane, z, 0);
+      coinRow(slots, a, z + 2, 4);
+      place(slots, 'overhead', 'overhead', a, z - 8, 0);
+      coinRow(slots, a, z - 5, 3, 0.45);
+      place(slots, 'slap', 'slacker', b, z - 6, 0, 0, WALK_SPEED);
+      truck(slots, b, z - 14, 'van', false, false);
+      place(slots, 'healthy', 'whey', lane, z - 16, 0.9);
+      place(slots, 'healthy', 'banana', a, z - 12, 0.9);
+      if (Math.random() < 0.45) place(slots, 'bike', 'bike', a, z - 20, 0);
+      break;
+    }
+    case 'proteinRush': {
+      // Two protein cartons with junk on the sides and a slap combo in between.
+      place(slots, 'healthy', 'whey', lane, z, 0.9);
+      place(slots, 'barrier', pick(JUNK), a, z, 0);
+      place(slots, 'barrier', pick(JUNK), b, z - 1, 0);
+      coinRow(slots, lane, z - 4, 4);
+      place(slots, 'slap', 'slacker', a, z - 9, 0, 0, WALK_SPEED);
+      place(slots, 'slap', 'slacker', a, z - 12.5, 0, 0, WALK_SPEED);
+      place(slots, 'healthy', 'banana', b, z - 11, 0.9);
+      place(slots, 'healthy', 'whey', lane, z - 16, 0.9);
+      if (Math.random() < 0.5) place(slots, 'bike', 'bike', b, z - 20, 0);
+      break;
+    }
+    case 'snackHop': {
+      // Banana trail with a junk bump — hop or switch lanes, then grab another.
+      place(slots, 'healthy', 'banana', lane, z, 0.9);
+      coinRow(slots, lane, z - 3, 3);
+      place(slots, 'barrier', pick(JUNK), a, z - 6, 0);
+      place(slots, 'healthy', 'banana', a, z - 10, 0.9);
+      place(slots, 'slap', 'slacker', b, z - 8, 0, 0, WALK_SPEED);
+      if (Math.random() < 0.55) place(slots, 'healthy', 'banana', b, z - 14, 0.9);
+      if (Math.random() < 0.4) place(slots, 'barrier', pick(JUNK), lane, z - 18, 0);
+      break;
+    }
+    case 'gymZone': {
+      // Mini gym: barbell coins, punching-bag slackers, treadmill weave, gym cans.
+      // Always a clear lane through the bags.
+      const bags = lane;
+      const free = a;
+      place(slots, 'slap', 'slacker', bags, z, 0, 0, WALK_SPEED);
+      place(slots, 'slap', 'slacker', bags, z - 6, 0, 0, WALK_SPEED);
+      coinRow(slots, 1, z + 1, 8);
+      coinRow(slots, 0, z - 10, 5);
+      coinRow(slots, 2, z - 10, 5);
+      place(slots, 'healthy', 'creatine', free, z - 4, 0.9);
+      place(slots, 'healthy', 'prework', b, z - 14, 0.9);
+      place(slots, 'healthy', 'whey', 1, z - 18, 0.9);
+      place(slots, 'barrier', pick(JUNK), b, z - 8, 0);
+      break;
+    }
   }
   return SPAWN_Z - patternTail;
 }
 
 /** Time to react to a new pattern plus a two-lane change (s). */
-const REACTION_S = 0.35;
+const REACTION_S = 0.32;
 const TWO_LANE_SHIFT_S = 0.36;
 /** Ramps and coin arcs can sit this far in front of SPAWN_Z. */
 const LEAD_IN = 5;
@@ -429,7 +513,7 @@ const LEAD_IN = 5;
  * it has passed the runner.
  */
 export function nextGap(prevDepth: number, next: PatternId, speed: number): number {
-  let gap = prevDepth + LEAD_IN + speed * (REACTION_S + TWO_LANE_SHIFT_S) + 3 + Math.random() * 7;
+  let gap = prevDepth + LEAD_IN + speed * (REACTION_S + TWO_LANE_SHIFT_S) + 2 + Math.random() * 5.5;
   if (ONCOMING_PATTERNS.has(next)) {
     const catchUp = (-SPAWN_Z * ONCOMING_SPEED) / (speed + ONCOMING_SPEED);
     gap = Math.max(gap, prevDepth + catchUp + 4);

@@ -45,11 +45,12 @@ export function LevelComplete({ level, score, bonus, onNext }: Props) {
   return (
     <View style={styles.root}>
       <Animated.View style={[styles.titleWrap, titleStyle]}>
-        <Text style={styles.titleShadow}>LEVEL CLEAR!</Text>
-        <Text style={styles.title}>LEVEL CLEAR!</Text>
+        <Text style={styles.titleShadow}>NIVEAU TERMINÉ !</Text>
+        <Text style={styles.title}>NIVEAU TERMINÉ !</Text>
       </Animated.View>
       <Animated.View style={[styles.card, cardStyle]}>
-        <Text style={styles.levelText}>LEVEL {level}</Text>
+        <Text style={styles.levelText}>NIVEAU {level} RÉUSSI</Text>
+        <Text style={styles.keepGoing}>Continue — le prochain tronçon est plus long</Text>
         <View style={styles.statsRow}>
           <View style={styles.stat}>
             <Text style={styles.statLabel}>SCORE</Text>
@@ -65,7 +66,7 @@ export function LevelComplete({ level, score, bonus, onNext }: Props) {
           </View>
         </View>
         <Pressable style={styles.nextBtn} onPress={onNext} accessibilityRole="button">
-          <Text style={styles.nextText}>NEXT</Text>
+          <Text style={styles.nextText}>SUIVANT</Text>
         </Pressable>
       </Animated.View>
     </View>
@@ -113,9 +114,15 @@ const styles = StyleSheet.create({
   },
   levelText: {
     ...display,
-    color: colors.muted,
-    fontSize: 14,
+    color: colors.yellowBright,
+    fontSize: 16,
     letterSpacing: 1,
+  },
+  keepGoing: {
+    ...display,
+    color: colors.muted,
+    fontSize: 13,
+    textAlign: 'center',
   },
   statsRow: {
     flexDirection: 'row',

@@ -6,10 +6,10 @@ export type ColorSlot = 'body' | 'shorts' | 'accents' | 'eyes';
 export type PlayerColors = Record<ColorSlot, string>;
 
 export const COLOR_SLOTS: { id: ColorSlot; label: string }[] = [
-  { id: 'body', label: 'BODY' },
-  { id: 'shorts', label: 'SHORTS' },
+  { id: 'body', label: 'CORPS' },
+  { id: 'shorts', label: 'SHORT' },
   { id: 'accents', label: 'ACCENTS' },
-  { id: 'eyes', label: 'EYES' },
+  { id: 'eyes', label: 'YEUX' },
 ];
 
 /** Classic yellow Fit Monster defaults (matches the character sheets). */
@@ -30,6 +30,8 @@ export const BODY_SWATCHES = [
   '#2F7BFF',
   '#14C8B4',
   '#4CAF50',
+  '#4A4C54',
+  '#8A8A94',
   '#F4F4F8',
   '#1B1B21',
   '#F0A630',
@@ -43,6 +45,8 @@ export const SHORTS_SWATCHES = [
   '#1A3A6B',
   '#0E4D3A',
   '#4A148C',
+  '#4A4C54',
+  '#8A8A94',
   '#FCB202',
   '#F4F4F8',
   '#6B3E26',
@@ -57,6 +61,8 @@ export const ACCENT_SWATCHES = [
   '#FF4D6A',
   '#14C8B4',
   '#9E9E9E',
+  '#4A4C54',
+  '#8A8A94',
   '#141416',
   '#FF9800',
 ] as const;
@@ -114,8 +120,8 @@ export function applyPlayerColors(base: Outfit, colors: PlayerColors): Outfit {
     leggings: colors.shorts,
     wrist: colors.accents,
     piping: colors.accents,
-    emblem: colors.accents,
-    harness: colors.accents,
+    emblem: colors.body,
+    harness: colors.body,
     sock: colors.accents,
     sole: colors.accents,
     shoe: colors.shorts,

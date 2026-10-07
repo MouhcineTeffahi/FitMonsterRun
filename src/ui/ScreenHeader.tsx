@@ -15,7 +15,7 @@ type Props = {
 export function ScreenHeader({ title, onBack, coins }: Props) {
   return (
     <View style={styles.header}>
-      <Pressable onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
+      <Pressable onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Retour">
         <Text style={styles.backText}>‹</Text>
       </Pressable>
       <Text style={styles.title} numberOfLines={1}>

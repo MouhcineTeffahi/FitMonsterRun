@@ -27,10 +27,14 @@ import {
   glowTexture,
   halo,
   makeGlowy,
-  proteinShaker,
+  creatineBox,
+  preworkBox,
+  proteinBox,
   sharpenFood,
   slackerFigure,
+  streetBike,
   waterBottle,
+  type BikeRig,
   type WalkRig,
 } from './items';
 import { PedestrianRig } from './pedestrians';
@@ -43,7 +47,7 @@ const FOOD_MODELS: Partial<Record<Variant3D, { key: ModelKey; size: number }>> =
   soda: { key: 'soda', size: 1.9 },
   broccoli: { key: 'broccoli', size: 1.85 },
   chicken: { key: 'chicken', size: 1.95 },
-  apple: { key: 'apple', size: 1.55 },
+  banana: { key: 'banana', size: 1.9 },
 };
 
 const SHIRTS = ['#E23B3B', '#3D7EFF', '#F08A24', '#7A4E9A', '#2E9B57', '#C9842A'];
@@ -68,7 +72,7 @@ export class ObstaclePools {
 
   constructor(
     foods: Partial<Record<Variant3D, THREE.Object3D>>,
-    extras: { proteinTub?: THREE.Object3D; pedestrians?: GLTF },
+    extras: { pedestrians?: GLTF },
   ) {
     const truckMat = propMaterial({ roughness: 0.42, metalness: 0.08 });
     for (const v of TRUCK_VARIANTS) {
@@ -101,19 +105,9 @@ export class ObstaclePools {
     build('platform', hoverPlatform);
     build('walkway', walkway);
     build('water', () => healthyPickup(waterBottle(), '#4FC3FF'));
-    build('whey', () => {
-      if (extras.proteinTub) {
-        try {
-          const tub = normalizedClone(extras.proteinTub, { height: 1.05, anchor: 'center', shadows: true });
-          sharpenFood(tub);
-          makeGlowy(tub, 0.05);
-          return healthyPickup(tub, '#D4A017');
-        } catch {
-          // Fall through to the procedural shaker.
-        }
-      }
-      return healthyPickup(proteinShaker(), '#D4A017');
-    });
+    build('whey', () => healthyPickup(proteinBox(), colors.protein));
+    build('creatine', () => healthyPickup(creatineBox(), '#FFE082'));
+    build('prework', () => healthyPickup(preworkBox(), '#FF3D6E'));
     let shirt = 0;
     // Kenney Mini Characters (CC0): 12 animated townsfolk, two per pooled slot.
     build('slacker', () => {
@@ -129,6 +123,7 @@ export class ObstaclePools {
       }
       return slackerFigure(SHIRTS[n % SHIRTS.length]);
     });
+    build('bike', () => streetBike());
     (Object.keys(FOOD_MODELS) as Variant3D[]).forEach((v) => {
       const def = FOOD_MODELS[v]!;
       const junk = JUNK_VARIANTS.has(v);
@@ -205,6 +200,17 @@ export class ObstaclePools {
         g.rotation.set(-fall * 8, fall * 5 * spin, spin * fall * 6);
         g.scale.setScalar(1);
       }
+    } else if (slot.kind === 'bike') {
+      const hop = slot.hit ? Math.max(-0.12, Math.min(0.16, slot.flyY * 0.018)) : 0;
+      g.rotation.set(hop, slot.hit ? 0 : 0.35, 0);
+      g.scale.setScalar(slot.hit ? 1.08 : 1.15);
+      const bike = (g.children[0]?.userData.bike ?? null) as BikeRig | null;
+      if (bike) {
+        const spin = slot.hit ? t * 16 : 0;
+        bike.wheels[0].rotation.x = spin;
+        bike.wheels[1].rotation.x = spin;
+        bike.crank.rotation.x = spin * 1.35;
+      }
     } else if (slot.sway) {
       g.position.y = Math.sin(slot.phase * 2) * 0.05;
     }
@@ -229,11 +235,7 @@ export class ObstaclePools {
 const FOOD_ENTRIES = Object.entries(FOOD_MODELS) as [Variant3D, { key: ModelKey; size: number }][];
 
 export function useObstaclePools(): ObstaclePools {
-  const urls = [
-    ...FOOD_ENTRIES.map(([, def]) => modelUrl(def.key)),
-    modelUrl('proteinTub'),
-    modelUrl('pedestrians'),
-  ];
+  const urls = [...FOOD_ENTRIES.map(([, def]) => modelUrl(def.key)), modelUrl('pedestrians')];
   const loaded = useLoader(GLTFLoader, urls);
   return useMemo(() => {
     const map: Partial<Record<Variant3D, THREE.Object3D>> = {};
@@ -241,8 +243,7 @@ export function useObstaclePools(): ObstaclePools {
       map[variant] = loaded[i].scene;
     });
     return new ObstaclePools(map, {
-      proteinTub: loaded[FOOD_ENTRIES.length]?.scene,
-      pedestrians: loaded[FOOD_ENTRIES.length + 1],
+      pedestrians: loaded[FOOD_ENTRIES.length],
     });
   }, [loaded]);
 }

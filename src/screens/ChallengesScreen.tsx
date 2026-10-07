@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { DAILY_CHALLENGES, timeToReset, todayKey } from '../data/challenges';
+import { ACHIEVEMENTS } from '../data/retention';
+import { playSfx } from '../game/audio/sfx';
 import { colors, radii, spacing } from '../data/theme';
 import { useProgressStore, type DailyState } from '../store/progressStore';
 import { DumbbellMark } from '../ui/DumbbellMark';
@@ -17,6 +19,7 @@ export function ChallengesScreen({ onBack }: Props) {
   const daily = useProgressStore((s) => s.daily);
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const claimChallenge = useProgressStore((s) => s.claimChallenge);
+  const achievements = useProgressStore((s) => s.achievements);
   const [countdown, setCountdown] = useState(timeToReset());
 
   useEffect(() => {
@@ -28,7 +31,7 @@ export function ChallengesScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScreenHeader title="DAILY CHALLENGES" onBack={onBack} coins={totalCoins} />
+      <ScreenHeader title="DÉFIS DU JOUR" onBack={onBack} coins={totalCoins} />
       <ScrollView contentContainerStyle={styles.list}>
         {DAILY_CHALLENGES.map((c) => {
           const value = Math.floor(today.progress[c.stat] ?? 0);
@@ -54,7 +57,7 @@ export function ChallengesScreen({ onBack }: Props) {
                   <Text style={styles.claimedText}>✓</Text>
                 </View>
               ) : done ? (
-                <Pressable style={styles.claimBtn} onPress={() => claimChallenge(c.id)} accessibilityRole="button">
+                <Pressable style={styles.claimBtn} onPress={() => { if (claimChallenge(c.id)) playSfx('coin'); }} accessibilityRole="button">
                   <Text style={styles.claimText}>+{c.reward}</Text>
                 </Pressable>
               ) : (
@@ -68,9 +71,21 @@ export function ChallengesScreen({ onBack }: Props) {
         })}
 
         <View style={styles.resetBox}>
-          <Text style={styles.resetLabel}>NEW CHALLENGE IN</Text>
+          <Text style={styles.resetLabel}>NOUVEAUX DÉFIS DANS</Text>
           <Text style={styles.resetTime}>{countdown}</Text>
         </View>
+
+        <Text style={styles.resetLabel}>PROFIL · SUCCÈS</Text>
+        {ACHIEVEMENTS.map((a) => {
+          const got = achievements.includes(a.id);
+          return (
+            <View key={a.id} style={[styles.card, got && styles.cardReady]}>
+              <Text style={styles.icon}>{a.icon}</Text>
+              <Text style={[styles.label, { flex: 1 }]}>{a.label}</Text>
+              <Text style={styles.rewardText}>{got ? '✓' : '…'}</Text>
+            </View>
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );

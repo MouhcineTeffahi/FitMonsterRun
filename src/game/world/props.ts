@@ -18,6 +18,18 @@ export function treeGeometry() {
   ]);
 }
 
+/** Snow-loaded pine: pale trunk, white packed canopy (no brown). */
+export function snowTreeGeometry() {
+  return mergeParts([
+    { geo: cyl(0.12, 0.18, 1.6, 7), color: '#C5D4E8', at: { y: 0.8 }, tint: 1 },
+    { geo: ico(1.15, 1), color: '#F4F8FC', at: { y: 2.15 }, tint: 1 },
+    { geo: ico(0.85, 1), color: '#E8F2FA', at: { y: 2.85 }, tint: 1 },
+    { geo: ico(0.55, 1), color: '#FFFFFF', at: { y: 3.45 }, tint: 1 },
+    { geo: ico(0.5, 0), color: '#F4F8FC', at: { x: 0.45, y: 2.2, z: 0.15 }, tint: 1 },
+    { geo: ico(0.42, 0), color: '#FFFFFF', at: { x: -0.4, y: 2.4, z: -0.2 }, tint: 1 },
+  ]);
+}
+
 export function palmGeometry() {
   const parts: Part[] = [];
   // Gently curved trunk from stacked, offset segments.
@@ -179,15 +191,56 @@ export function rockGeometry() {
   ]);
 }
 
-/** Giant dumbbell statue on a plinth for the gym district. */
-export function dumbbellStatueGeometry() {
-  const plate = (x: number, r: number, c: string): Part => ({ geo: cyl(r, r, 0.35, 14), color: c, at: { x, y: 2.6, rz: Math.PI / 2 }, tint: 1 });
+/** Outdoor gym station: mat, bench, rack and a barbell — no giant glowing plinth. */
+export function gymStationGeometry() {
+  const steel = '#9AA3B5';
+  const pad = '#3B3F58';
   return mergeParts([
-    { geo: box(2.6, 1.2, 1.6), color: '#3B3F58', at: { y: 0.6 } },
-    { geo: box(2.7, 0.12, 1.7), color: [2.4, 2.0, 0.6], at: { y: 1.22 } },
-    { geo: cyl(0.12, 0.12, 0.9, 8), color: '#AEB6C8', at: { y: 1.7 } },
-    { geo: cyl(0.13, 0.13, 3.0, 10), color: '#D7DCE6', at: { y: 2.6, rz: Math.PI / 2 } },
-    plate(-1.2, 0.9, '#FF3D5A'), plate(-0.88, 0.7, '#FF3D5A'),
-    plate(1.2, 0.9, '#FF3D5A'), plate(0.88, 0.7, '#FF3D5A'),
+    { geo: box(1.7, 0.08, 2.5), color: '#1A1C24', at: { y: 0.04 } },
+    { geo: box(0.48, 0.32, 1.45), color: pad, at: { y: 0.42 } },
+    { geo: box(0.12, 0.38, 0.12), color: steel, at: { y: 0.19, z: 0.58 } },
+    { geo: box(0.12, 0.38, 0.12), color: steel, at: { y: 0.19, z: -0.58 } },
+    { geo: box(0.1, 1.55, 0.1), color: steel, at: { x: -0.52, y: 0.78, z: -0.95 } },
+    { geo: box(0.1, 1.55, 0.1), color: steel, at: { x: 0.52, y: 0.78, z: -0.95 } },
+    { geo: box(0.16, 0.08, 0.22), color: '#FFD54F', at: { x: -0.52, y: 1.32, z: -0.95 } },
+    { geo: box(0.16, 0.08, 0.22), color: '#FFD54F', at: { x: 0.52, y: 1.32, z: -0.95 } },
+    { geo: cyl(0.045, 0.045, 1.55, 8), color: '#D7DCE6', at: { y: 1.38, z: -0.95, rz: Math.PI / 2 } },
+    { geo: cyl(0.2, 0.2, 0.07, 12), color: '#E8434F', at: { x: -0.68, y: 1.38, z: -0.95, rz: Math.PI / 2 } },
+    { geo: cyl(0.2, 0.2, 0.07, 12), color: '#E8434F', at: { x: 0.68, y: 1.38, z: -0.95, rz: Math.PI / 2 } },
+    { geo: cyl(0.26, 0.26, 0.07, 12), color: '#3B3F58', at: { x: 0.62, y: 0.2, z: 0.78 } },
+    { geo: cyl(0.22, 0.22, 0.07, 12), color: '#E8434F', at: { x: 0.62, y: 0.27, z: 0.78 } },
+  ]);
+}
+
+/** Beach ball / harbour buoy — one icosphere, tinted per instance. */
+export function ballGeometry() {
+  return mergeParts([
+    { geo: ico(0.34, 1), color: '#FF4F6D', at: { y: 0.34 }, tint: 1 },
+  ]);
+}
+
+/** Floor kettlebell. */
+export function kettlebellGeometry() {
+  return mergeParts([
+    { geo: ico(0.28, 1), color: '#2F3247', at: { y: 0.28 }, tint: 1 },
+    { geo: cyl(0.1, 0.1, 0.22, 8), color: '#3B3F58', at: { y: 0.52 }, tint: 1 },
+    { geo: cyl(0.04, 0.04, 0.28, 8), color: '#9AA3B5', at: { y: 0.68, s: [1, 1, 1] } },
+  ]);
+}
+
+/** Person training: standing press with small dumbbells. */
+export function trainerGeometry() {
+  const skin = '#E8A070';
+  const shirt = '#E8434F';
+  return mergeParts([
+    { geo: box(0.2, 0.52, 0.2), color: '#2A2A32', at: { x: -0.11, y: 0.26 } },
+    { geo: box(0.2, 0.52, 0.2), color: '#2A2A32', at: { x: 0.11, y: 0.26 } },
+    { geo: box(0.48, 0.28, 0.26), color: shirt, at: { y: 0.66 }, tint: 1 },
+    { geo: box(0.44, 0.5, 0.24), color: skin, at: { y: 1.05 }, tint: 1 },
+    { geo: cyl(0.15, 0.15, 0.26, 8), color: skin, at: { y: 1.42 }, tint: 1 },
+    { geo: box(0.14, 0.42, 0.14), color: skin, at: { x: -0.36, y: 1.28, rz: 0.55 }, tint: 1 },
+    { geo: box(0.14, 0.42, 0.14), color: skin, at: { x: 0.36, y: 1.28, rz: -0.55 }, tint: 1 },
+    { geo: cyl(0.1, 0.1, 0.08, 8), color: '#3B3F58', at: { x: -0.52, y: 1.5, rz: Math.PI / 2 } },
+    { geo: cyl(0.1, 0.1, 0.08, 8), color: '#3B3F58', at: { x: 0.52, y: 1.5, rz: Math.PI / 2 } },
   ]);
 }

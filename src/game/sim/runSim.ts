@@ -1,4 +1,5 @@
 import { MAX_ENERGY, SPEED_INTERVAL_MS } from '../../data/theme';
+import { DEFAULT_UPGRADES, type Upgrades } from '../../data/shop';
 import {
   BARRIER_HEIGHT,
   BODIES,
@@ -32,7 +33,7 @@ export type RunStats = {
   speed: number;
   /** Seconds of power mode left (0 = off). */
   power: number;
-  /** Whey bottles collected toward the next power mode. */
+  /** Protein cartons collected toward the next power mode. */
   powerCharge: number;
   level: number;
   /** Distance at which the current level ends. */
@@ -46,6 +47,18 @@ export type RunStats = {
   bestCombo: number;
   /** Close calls rewarded this run. */
   nearMisses: number;
+  /** 0 = lean good body, 1 = stuffed from junk food. */
+  bulk: number;
+  /** Seconds left on the pickup combo window. */
+  comboT: number;
+  /** Combo score tier: 1, 2, 3 or 5. */
+  comboMult: number;
+  /** Whey magnet seconds left. */
+  magnet: number;
+  /** Creatine gold-shield seconds left. */
+  shield: number;
+  /** Pre-workout x2-score seconds left. */
+  boost: number;
 };
 
 /** Gameplay feedback; some drive toasts, the rest drive VFX/camera/audio. */
@@ -74,7 +87,12 @@ export type RunEvent =
   | 'combo'
   | 'nearMiss'
   | 'lowEnergy'
-  | 'death';
+  | 'death'
+  | 'bike'
+  | 'gymZone'
+  | 'creatine'
+  | 'prework'
+  | 'magnet';
 
 export type RunInput = {
   lane: number;
@@ -115,6 +133,14 @@ export type RunState = {
   attackT: number;
   /** True after the low-energy warning until energy recovers. */
   warnedLow: boolean;
+  /** Riding a street bicycle. */
+  onBike: boolean;
+  magnetT: number;
+  speedBoostT: number;
+  shieldT: number;
+  boostT: number;
+  slowT: number;
+  mods: Upgrades;
   stats: RunStats;
 };
 
@@ -149,18 +175,41 @@ const DANCE_X = 3.7;
 const BUDDY_PACE = 0.86;
 export const LEVEL_BONUS_COINS = 250;
 /** Pickup chain stays alive this long between collects. */
-const COMBO_WINDOW = 1.8;
+export const COMBO_WINDOW = 1.8;
+export const REVIVE_COST = 50;
+export const REVIVE_INVULN_S = 2;
+export const MAGNET_TIME = 8;
+export const SHIELD_TIME = 5;
+export const BOOST_TIME = 10;
+const GYM_ZONE_EVERY = 500;
 const LOW_ENERGY = 25;
 /** No energy drain until the runner is past the opening stretch. */
 const GRACE_DISTANCE = 80;
-const LEVEL_STEP = 500;
+/** Metres in level 1. Old value was 500 — runs were clearing in ~30s. */
+const LEVEL_BASE = 1200;
+/** Extra metres stacked onto each later level's span so the road keeps growing. */
+const LEVEL_GROWTH = 180;
+const BIKE_BONUS = 8;
 
-/** Distance at which `level` ends: each level is 500 m × its number (500, 1500, 3000…). */
+/**
+ * Cumulative distance at which `level` ends.
+ * Level 1 is 1200 m (2.4× the old 500). Later spans grow faster:
+ * 2760, 4680, 6960… so a long run has a real ladder of checkpoints.
+ */
 export function levelGoalFor(level: number): number {
-  return (LEVEL_STEP * level * (level + 1)) / 2;
+  if (level <= 0) return 0;
+  const L = level;
+  return (LEVEL_BASE * L * (L + 1)) / 2 + (LEVEL_GROWTH * L * (L + 1) * (L - 1)) / 3;
 }
 
-export function createRunState(): RunState {
+export function comboTier(combo: number): 1 | 2 | 3 | 5 {
+  if (combo >= 8) return 5;
+  if (combo >= 5) return 3;
+  if (combo >= 3) return 2;
+  return 1;
+}
+
+export function createRunState(mods: Upgrades = DEFAULT_UPGRADES): RunState {
   return {
     x: LANE_X[1],
     vx: 0,
@@ -174,7 +223,7 @@ export function createRunState(): RunState {
     speed: BASE_SPEED,
     speedTimer: 0,
     gap: 6,
-    nextPattern: 'slackers',
+    nextPattern: 'bikes',
     invuln: 0,
     shake: 0,
     hitT: 99,
@@ -184,6 +233,13 @@ export function createRunState(): RunState {
     attackSide: 1,
     attackT: 99,
     warnedLow: false,
+    onBike: false,
+    magnetT: 0,
+    speedBoostT: 0,
+    shieldT: 0,
+    boostT: 0,
+    slowT: 0,
+    mods: { ...mods },
     stats: {
       score: 0,
       coins: 0,
@@ -201,17 +257,33 @@ export function createRunState(): RunState {
       combo: 0,
       bestCombo: 0,
       nearMisses: 0,
+      bulk: 0,
+      comboT: 0,
+      comboMult: 1,
+      magnet: 0,
+      shield: 0,
+      boost: 0,
     },
   };
+}
+
+/** One continue: restore energy, 2s invulnerability. */
+export function reviveRun(s: RunState) {
+  s.dead = false;
+  s.stats.energy = Math.max(55, s.stats.energy);
+  s.invuln = REVIVE_INVULN_S;
+  s.hitT = 99;
+  s.shake = 0.12;
 }
 
 function bumpCombo(s: RunState, emit: (e: RunEvent) => void) {
   const st = s.stats;
   st.combo += 1;
   s.comboT = COMBO_WINDOW;
+  st.comboMult = comboTier(st.combo);
   if (st.combo > st.bestCombo) st.bestCombo = st.combo;
-  if (st.combo >= 5 && st.combo % 5 === 0) {
-    // Milestone juice: free coins scale with the chain.
+  if (st.combo === 3 || (st.combo >= 5 && st.combo % 5 === 0)) {
+    // Milestone juice: first pop at 3, then every 5. Coins scale with the chain.
     const bonus = Math.min(12, 2 + Math.floor(st.combo / 5));
     st.coins += bonus;
     st.score += bonus * 8 * st.multiplier;
@@ -279,13 +351,25 @@ function supportHeight(slots: Slot[], s: RunState): number {
   return ground;
 }
 
-function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) => void, flavour: 'burp' | 'bonk') {
-  s.stats.energy -= damage;
+function dropBike(s: RunState, slots: Slot[]) {
+  if (!s.onBike) return;
+  s.onBike = false;
+  for (const slot of slots) {
+    if (slot.kind === 'bike' && slot.hit && slot.active) slot.active = false;
+  }
+}
+
+function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) => void, flavour: 'burp' | 'bonk', slots?: Slot[]) {
+  if (slots) dropBike(s, slots);
+  const resist = 1 - 0.07 * (s.mods.force - 1);
+  s.stats.energy -= damage * resist;
   s.stats.combo = 0;
   s.comboT = 0;
+  s.stats.comboMult = 1;
   s.invuln = HIT_INVULN_S;
   s.shake = shake;
   s.hitT = 0;
+  if (flavour === 'burp') s.slowT = Math.max(s.slowT, 1.5);
   emit('hit');
   emit(flavour);
 }
@@ -303,6 +387,7 @@ export function stepRun(
 ): boolean {
   if (s.dead) return false;
   const st = s.stats;
+  const prevDistance = st.distance;
 
   s.speedTimer += dt * 1000;
   if (s.speedTimer >= SPEED_INTERVAL_MS) {
@@ -311,9 +396,12 @@ export function stepRun(
     st.multiplier = Math.min(9, st.multiplier + 1);
     emit('speedup');
   }
-  st.speed = s.speed;
-  const dz = s.speed * dt;
-  const mult = st.multiplier * (s.stats.power > 0 ? 2 : 1);
+  const wheyBoost = s.speedBoostT > 0 ? 4 : 0;
+  const slow = s.slowT > 0 ? 0.82 : 1;
+  const pace = (s.mods.vitesse - 1) * 0.35;
+  st.speed = (s.speed + pace + (s.onBike ? BIKE_BONUS : 0) + wheyBoost) * slow;
+  const dz = st.speed * dt;
+  const mult = st.multiplier * (st.power > 0 ? 2 : 1) * (s.boostT > 0 ? 2 : 1);
 
   // Exact critically damped spring toward the lane centre (stable at any dt).
   const targetX = LANE_X[input.lane as LaneIndex];
@@ -330,11 +418,34 @@ export function stepRun(
     s.nextPattern = choosePattern(st.distance);
     s.gap = nextGap(depth, s.nextPattern, s.speed);
     if (st.distance < 420) s.gap += 8;
+    else if (st.distance > 800) s.gap = Math.max(13, s.gap - 5);
     spawned = true;
+  }
+
+  const magnetR = (s.magnetT > 0 ? 3.2 : 0) + (s.mods.aimant - 1) * 0.5;
+  if (magnetR > 0.15) {
+    for (const slot of slots) {
+      if (!slot.active || slot.popT >= 0) continue;
+      if (slot.kind !== 'coin' && slot.kind !== 'healthy') continue;
+      const dzp = slot.z - PLAYER_Z;
+      if (dzp < -1.2 || dzp > 9) continue;
+      const dx = s.x - slot.x;
+      if (Math.hypot(dx, dzp * 0.4) > magnetR) continue;
+      // Ease in — a hard snap stacked every banana on him in one frame.
+      slot.x += dx * Math.min(1, dt * 3.2);
+      slot.z += (PLAYER_Z - slot.z) * Math.min(1, dt * 1.35);
+    }
   }
 
   for (const slot of slots) {
     if (!slot.active) continue;
+    if (slot.kind === 'bike' && slot.hit && s.onBike) {
+      slot.x = s.x;
+      slot.z = PLAYER_Z;
+      slot.y = s.y;
+      slot.flyY = s.vy;
+      continue;
+    }
     const prevZ = slot.z;
     slot.z += dz + slot.vz * dt;
     if (slot.sway) {
@@ -387,7 +498,7 @@ export function stepRun(
       slot.hit = true;
       st.junkDodged += 1;
     }
-    if (tail > DESPAWN_Z) slot.active = false;
+    if (tail > DESPAWN_Z && !(slot.kind === 'bike' && slot.hit && s.onBike)) slot.active = false;
   }
 
   const ground = supportHeight(slots, s);
@@ -405,6 +516,7 @@ export function stepRun(
   }
   if (input.slideQueued) {
     input.slideQueued = false;
+    if (s.onBike) dropBike(s, slots);
     if (grounded) {
       if (s.slideT <= 0) emit('slide');
       s.slideT = SLIDE_TIME;
@@ -424,6 +536,16 @@ export function stepRun(
     if (s.vy < 0) s.vy = 0;
   }
   s.airborne = s.y > ground + 0.05;
+  if (s.onBike) {
+    for (const slot of slots) {
+      if (slot.kind === 'bike' && slot.hit && slot.active) {
+        slot.x = s.x;
+        slot.z = PLAYER_Z;
+        slot.y = s.y;
+        slot.flyY = s.vy;
+      }
+    }
+  }
   if (wasAirborne && !s.airborne) {
     emit('land');
     if (s.slideOnLand) {
@@ -449,6 +571,10 @@ export function stepRun(
   const lane = nearestLane(s.x);
   const aligned = Math.abs(s.x - LANE_X[lane]) < 0.95;
   const powered = st.power > 0;
+  const sucking = s.magnetT > 0;
+  let grabs = 0;
+  const grabCap = sucking ? 2 : 4;
+  let bulkShift = 0;
 
   for (const slot of slots) {
     if (!slot.active || slot.popT >= 0) continue;
@@ -472,15 +598,16 @@ export function stepRun(
       }
       if (s.invuln > 0) continue;
       slot.hit = true;
-      hurt(s, body.damage, 0.5, emit, 'bonk');
+      hurt(s, body.damage, 0.5, emit, 'bonk', slots);
     } else if (slot.kind === 'barrier') {
       if (Math.abs(dzp) > 0.8 || !overlaps(s, slot, SMALL_REACH)) continue;
       if (s.y >= BARRIER_HEIGHT) continue;
       if (powered) {
-        // Power mode: run straight through junk food.
+        // Power mode: run straight through junk food — still a bite, so the body grows.
         slot.popT = 0;
         slot.hit = true;
         st.junkDodged += 1;
+        st.bulk = Math.min(1, st.bulk + 0.16);
         bumpCombo(s, emit);
         st.score += (20 + comboBonus(st.combo)) * mult;
         emit('smash');
@@ -488,13 +615,14 @@ export function stepRun(
       }
       if (s.invuln > 0) continue;
       slot.active = false;
-      hurt(s, 20, 0.4, emit, 'burp');
+      st.bulk = Math.min(1, st.bulk + 0.28);
+      hurt(s, 20, 0.4, emit, 'burp', slots);
     } else if (slot.kind === 'overhead') {
       if (slot.hit || Math.abs(dzp) > 0.6 || !overlaps(s, slot, SMALL_REACH)) continue;
       const top = s.y + height;
       if (top <= OVERHEAD_BOTTOM || s.y >= OVERHEAD_TOP || s.invuln > 0) continue;
       slot.hit = true;
-      hurt(s, 25, 0.5, emit, 'bonk');
+      hurt(s, 25, 0.5, emit, 'bonk', slots);
     } else if (slot.kind === 'slap') {
       if (slot.hit || Math.abs(dzp) > 0.75 || !overlaps(s, slot, SMALL_REACH)) continue;
       if (s.y > 1.15) continue;
@@ -524,10 +652,27 @@ export function stepRun(
       st.score += (45 + comboBonus(st.combo)) * mult;
       emit(kick ? 'kick' : 'slap');
       if (slot.dance) emit('convert');
-    } else if ((slot.kind === 'coin' || slot.kind === 'healthy') && aligned && slot.lane === lane) {
-      if (Math.abs(dzp) > 0.85) continue;
+    } else if (slot.kind === 'bike') {
+      if (s.onBike || slot.hit || Math.abs(dzp) > 1.05 || !overlaps(s, slot, SMALL_REACH)) continue;
+      if (s.y > 1.35) continue;
+      slot.hit = true;
+      s.onBike = true;
+      s.vy = 0;
+      s.airborne = false;
+      bumpCombo(s, emit);
+      st.score += (60 + comboBonus(st.combo)) * mult;
+      emit('bike');
+    } else if (slot.kind === 'coin' || slot.kind === 'healthy') {
+      const close = Math.abs(slot.x - s.x) < (sucking ? 1.1 : 0.95) && Math.abs(dzp) < (sucking ? 1.15 : 0.85);
+      if (sucking) {
+        if (!close) continue;
+      } else if (!aligned || slot.lane !== lane || Math.abs(dzp) > 0.85) {
+        continue;
+      }
       const reachY = s.slideT > 0 ? s.y + 0.4 : s.y + 1.1;
       if (Math.abs(reachY - slot.y) > 1.3) continue;
+      if (grabs >= grabCap) continue;
+      grabs += 1;
       slot.popT = 0;
       if (slot.kind === 'coin') {
         st.coins += 1;
@@ -536,19 +681,49 @@ export function stepRun(
         emit('coin');
       } else if (slot.variant === 'whey') {
         st.proteins += 1;
+        const drop = Math.min(0.32, Math.max(0, 0.14 - bulkShift));
+        bulkShift += drop;
+        st.bulk = Math.max(0, st.bulk - drop);
         st.energy = Math.min(MAX_ENERGY, st.energy + 18);
         bumpCombo(s, emit);
         st.score += (50 + comboBonus(st.combo)) * mult;
+        s.magnetT = MAGNET_TIME;
+        s.speedBoostT = MAGNET_TIME;
         st.powerCharge += 1;
         if (st.powerCharge >= POWER_CHARGE) {
           st.powerCharge = 0;
           st.power = POWER_TIME;
           emit('power');
         } else {
-          emit('protein');
+          emit('magnet');
         }
+      } else if (slot.variant === 'creatine') {
+        st.proteins += 1;
+        const drop = Math.min(0.18, Math.max(0, 0.14 - bulkShift));
+        bulkShift += drop;
+        st.bulk = Math.max(0, st.bulk - drop);
+        st.energy = Math.min(MAX_ENERGY, st.energy + 10);
+        bumpCombo(s, emit);
+        st.score += (40 + comboBonus(st.combo)) * mult;
+        s.shieldT = SHIELD_TIME;
+        s.invuln = Math.max(s.invuln, SHIELD_TIME);
+        emit('creatine');
+      } else if (slot.variant === 'prework') {
+        st.proteins += 1;
+        const drop = Math.min(0.12, Math.max(0, 0.14 - bulkShift));
+        bulkShift += drop;
+        st.bulk = Math.max(0, st.bulk - drop);
+        st.energy = Math.min(MAX_ENERGY, st.energy + 8);
+        bumpCombo(s, emit);
+        st.score += (40 + comboBonus(st.combo)) * mult;
+        s.boostT = BOOST_TIME;
+        emit('prework');
       } else {
         if (slot.variant === 'chicken') st.proteins += 1;
+        const want = slot.variant === 'chicken' ? 0.14 : 0.1;
+        const drop = Math.min(want, Math.max(0, 0.14 - bulkShift));
+        bulkShift += drop;
+        st.bulk = Math.max(0, st.bulk - drop);
         st.energy = Math.min(MAX_ENERGY, st.energy + 12);
         bumpCombo(s, emit);
         st.score += (30 + comboBonus(st.combo)) * mult;
@@ -560,14 +735,36 @@ export function stepRun(
   s.shake = Math.max(0, s.shake - dt);
   s.attackT += dt;
   st.power = Math.max(0, st.power - dt);
+  s.magnetT = Math.max(0, s.magnetT - dt);
+  s.speedBoostT = Math.max(0, s.speedBoostT - dt);
+  s.shieldT = Math.max(0, s.shieldT - dt);
+  s.boostT = Math.max(0, s.boostT - dt);
+  s.slowT = Math.max(0, s.slowT - dt);
+  st.magnet = s.magnetT;
+  st.shield = s.shieldT;
+  st.boost = s.boostT;
   if (st.combo > 0) {
     s.comboT -= dt;
-    if (s.comboT <= 0) st.combo = 0;
+    if (s.comboT <= 0) {
+      st.combo = 0;
+      st.comboMult = 1;
+    }
   }
+  st.comboT = s.comboT;
+  st.comboMult = comboTier(st.combo);
   st.distance += dz;
-  st.score += dz * 0.5 * mult;
+  st.score += dz * 0.5 * st.multiplier * (st.power > 0 ? 2 : 1) * (s.boostT > 0 ? 2 : 1);
+  const drain = ENERGY_DRAIN_PER_S * (1 - 0.08 * (s.mods.endurance - 1)) * (s.onBike ? 0.45 : 1);
   if (st.distance > GRACE_DISTANCE) {
-    st.energy = Math.max(0, st.energy - ENERGY_DRAIN_PER_S * dt);
+    st.energy = Math.max(0, st.energy - drain * dt);
+  }
+  if (
+    Math.floor(prevDistance / GYM_ZONE_EVERY) !== Math.floor(st.distance / GYM_ZONE_EVERY) &&
+    st.distance >= GYM_ZONE_EVERY
+  ) {
+    s.nextPattern = 'gymZone';
+    s.gap = Math.min(s.gap, 5);
+    emit('gymZone');
   }
   if (st.energy > LOW_ENERGY + 15) s.warnedLow = false;
   if (!s.warnedLow && st.energy > 0 && st.energy <= LOW_ENERGY) {

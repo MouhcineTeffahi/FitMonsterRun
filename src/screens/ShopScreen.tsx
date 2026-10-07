@@ -2,7 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { paintedSkin } from '../data/playerColors';
+import {
+  ACCESSORIES,
+  STATS,
+  nextStatCost,
+  withAccessory,
+} from '../data/shop';
 import { getSkin, SKINS, type SkinId } from '../data/skins';
+import { playSfx } from '../game/audio/sfx';
 import { colors, radii, spacing } from '../data/theme';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
@@ -27,10 +34,17 @@ export function ShopScreen({ onBack, onCustomize }: Props) {
   const unlockSkin = useProgressStore((s) => s.unlockSkin);
   const selectSkin = useProgressStore((s) => s.selectSkin);
 
+  const selectedAccessory = useProgressStore((s) => s.selectedAccessory);
+  const unlockedAccessories = useProgressStore((s) => s.unlockedAccessories);
+  const buyAccessory = useProgressStore((s) => s.buyAccessory);
+  const selectAccessory = useProgressStore((s) => s.selectAccessory);
+  const upgrades = useProgressStore((s) => s.upgrades);
+  const upgradeStat = useProgressStore((s) => s.upgradeStat);
+  const [tab, setTab] = useState<'skins' | 'gear' | 'stats'>('skins');
   const [previewId, setPreviewId] = useState<SkinId>(selectedSkin);
   const preview = useMemo(
-    () => paintedSkin(getSkin(previewId), playerColors),
-    [previewId, playerColors],
+    () => withAccessory(paintedSkin(getSkin(previewId), playerColors), selectedAccessory),
+    [previewId, playerColors, selectedAccessory],
   );
   const unlocked = unlockedSkins.includes(previewId);
   const selected = selectedSkin === previewId;
@@ -45,21 +59,33 @@ export function ShopScreen({ onBack, onCustomize }: Props) {
     if (!spendCoins(preview.price)) return;
     unlockSkin(previewId);
     selectSkin(previewId);
+    playSfx('coin');
   };
 
   const actionLabel = selected
-    ? 'SELECTED ✓'
+    ? 'ÉQUIPÉ ✓'
     : unlocked
-      ? 'SELECT'
+      ? 'ÉQUIPER'
       : canAfford
-        ? `BUY · ${preview.price}`
-        : `NEED ${preview.price - totalCoins} MORE`;
+        ? `ACHETER · ${preview.price}`
+        : `ENCORE ${preview.price - totalCoins}`;
 
   return (
     <SafeAreaView style={ui.screen}>
-      <ScreenHeader title="SHOP / SKINS" onBack={onBack} coins={totalCoins} />
+      <ScreenHeader title="BOUTIQUE" onBack={onBack} coins={totalCoins} />
+      <View style={styles.tabs}>
+        {(['skins', 'gear', 'stats'] as const).map((id) => (
+          <Pressable key={id} style={[styles.tab, tab === id && styles.tabOn]} onPress={() => setTab(id)}>
+            <Text style={[styles.tabText, tab === id && styles.tabTextOn]}>
+              {id === 'skins' ? 'SKINS' : id === 'gear' ? 'ACCESSOIRES' : 'STATS'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {tab === 'skins' ? (
+        <>
         <View style={styles.stage}>
           <View style={[styles.stageGlow, { backgroundColor: `${playerColors.body}22` }]} />
           <MonsterShowcase skin={preview} style={styles.showcase} />
@@ -80,7 +106,7 @@ export function ShopScreen({ onBack, onCustomize }: Props) {
         </Pressable>
 
         <Pressable style={styles.paintBtn} onPress={onCustomize} accessibilityRole="button">
-          <Text style={styles.paintText}>🎨  CUSTOMIZE COLORS</Text>
+          <Text style={styles.paintText}>🎨  COULEURS</Text>
         </Pressable>
 
         <View style={styles.grid}>
@@ -104,14 +130,14 @@ export function ShopScreen({ onBack, onCustomize }: Props) {
                   <MonsterPreview skin={painted} size={118} />
                 </View>
                 <Text style={styles.cardName} numberOfLines={1}>
-                  {skin.name.replace(' Mode', '').replace(' Yellow', '').toUpperCase()}
+                  {skin.name.toUpperCase()}
                 </Text>
                 {isSelected ? (
                   <View style={styles.check}>
                     <Text style={styles.checkText}>✓</Text>
                   </View>
                 ) : owned ? (
-                  <Text style={styles.owned}>OWNED</Text>
+                  <Text style={styles.owned}>ACQUIS</Text>
                 ) : (
                   <View style={styles.priceRow}>
                     <Text style={styles.price}>{skin.price}</Text>
@@ -122,12 +148,133 @@ export function ShopScreen({ onBack, onCustomize }: Props) {
             );
           })}
         </View>
+        </>
+        ) : null}
+
+        {tab === 'gear' ? (
+          <View style={styles.list}>
+            {ACCESSORIES.map((a) => {
+              const owned = unlockedAccessories.includes(a.id);
+              const on = selectedAccessory === a.id;
+              return (
+                <Pressable
+                  key={a.id}
+                  style={[styles.rowCard, on && styles.cardSelected]}
+                  onPress={() => {
+                    if (owned) selectAccessory(a.id);
+                    else if (buyAccessory(a.id)) playSfx('coin');
+                  }}
+                >
+                  <View style={styles.rowCopy}>
+                    <Text style={styles.cardName}>{a.name.toUpperCase()}</Text>
+                    <Text style={styles.blurb}>{a.blurb}</Text>
+                  </View>
+                  <Text style={styles.price}>
+                    {on ? 'ÉQUIPÉ' : owned ? 'ÉQUIPER' : a.price === 0 ? 'GRATUIT' : String(a.price)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {tab === 'stats' ? (
+          <View style={styles.list}>
+            {STATS.map((st) => {
+              const lvl = upgrades[st.id];
+              const cost = nextStatCost(lvl);
+              return (
+                <View key={st.id} style={styles.rowCard}>
+                  <View style={styles.rowCopy}>
+                    <Text style={styles.cardName}>
+                      {st.icon}  {st.name.toUpperCase()} · {lvl}/{5}
+                    </Text>
+                    <Text style={styles.blurb}>{st.blurb}</Text>
+                  </View>
+                  {cost === null ? (
+                    <Text style={styles.owned}>MAX</Text>
+                  ) : (
+                    <Pressable
+                      style={styles.upBtn}
+                      onPress={() => {
+                        if (upgradeStat(st.id)) playSfx('power');
+                      }}
+                    >
+                      <Text style={styles.upText}>{cost}</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  tab: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: radii.sm,
+    backgroundColor: colors.panel,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabOn: {
+    backgroundColor: colors.yellow,
+    borderColor: '#FFE88A',
+  },
+  tabText: {
+    ...display,
+    color: colors.white,
+    fontSize: 12,
+  },
+  tabTextOn: {
+    color: colors.black,
+  },
+  list: {
+    gap: spacing.sm,
+  },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.panel,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  rowCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  blurb: {
+    ...display,
+    color: colors.muted,
+    fontSize: 12,
+  },
+  upBtn: {
+    backgroundColor: colors.yellow,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  upText: {
+    ...display,
+    color: colors.black,
+    fontSize: 16,
+  },
   scroll: {
     padding: spacing.md,
     gap: spacing.md,

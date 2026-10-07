@@ -43,17 +43,6 @@ export function MonsterPreview({ skin, size = 160 }: Props) {
 
         {/* torso */}
         <Path d="M52 36 L68 36 L70 42 Q88 42 92 52 Q90 70 80 82 Q78 92 76 98 L44 98 Q42 92 40 82 Q30 70 28 52 Q32 42 50 42 Z" fill={o.torso} />
-        <G stroke="#00000022" strokeWidth="1" fill="none">
-          <Path d="M40 66 Q50 72 60 66 Q70 72 80 66" />
-          <Path d="M52 78 L68 78 M53 86 L67 86 M60 72 L60 96" />
-        </G>
-        {/* harness + N */}
-        <G stroke={o.harness} strokeWidth="3.4" strokeLinecap="round" fill="none">
-          <Path d="M47 41 L54 52 M73 41 L66 52 M54 66 L34 70 M66 66 L86 70" />
-        </G>
-        <SvgText x="60" y="66" fontSize="17" fontWeight="900" fill={o.emblem} textAnchor="middle">
-          N
-        </SvgText>
 
         {/* shorts */}
         <Path d="M42 96 L78 96 L82 124 L62 126 L60 112 L58 126 L38 124 Z" fill={o.shorts} />

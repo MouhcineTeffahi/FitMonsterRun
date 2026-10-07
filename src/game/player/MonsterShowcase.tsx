@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import React, { Suspense, useEffect } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
 import * as THREE from 'three';
 
 import type { SkinDef } from '../../data/skins';
@@ -42,9 +42,9 @@ function Monster({ skin, mode }: { skin: SkinDef; mode: Exclude<MonsterMode, 'ru
 /** Live 3D preview of the Fit Monster (transparent canvas over any background). */
 export function MonsterShowcase({ skin, style, mode = 'pose', floor = true }: Props) {
   return (
-    <View style={style}>
+    <View style={style} pointerEvents="none">
       <Canvas
-        style={StyleSheet.absoluteFill}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}
         shadows
         camera={{ position: mode === 'hero' ? [0, HEIGHT * 0.55, 5.6] : [0, HEIGHT * 0.52, 4.0], fov: 30 }}
         dpr={[1, 2]}

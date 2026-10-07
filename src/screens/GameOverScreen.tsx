@@ -1,12 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, spacing } from '../data/theme';
 import type { RunSummary } from '../data/types';
 import { nextUnlockTeaser } from '../data/unlockTeasers';
+import { playSfx } from '../game/audio/sfx';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
 import { UnlockTeaserCard } from '../ui/UnlockTeaserCard';
+import { runShareText, shareRun } from '../utils/shareRun';
 import { ui } from '../utils/styles';
 
 type Props = {
@@ -21,34 +23,53 @@ export function GameOverScreen({ summary, onRestart, onHome }: Props) {
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
   const unlockedSpaces = useProgressStore((s) => s.unlockedSpaces);
+  const [shareNote, setShareNote] = useState<string | null>(null);
   const teaser = useMemo(
     () => nextUnlockTeaser(totalCoins, unlockedSkins, unlockedSpaces),
     [totalCoins, unlockedSkins, unlockedSpaces],
   );
 
+  const onShare = async () => {
+    playSfx('coin');
+    const result = await shareRun(runShareText(lastScore, summary.distance, summary.bestCombo));
+    setShareNote(result === 'copied' ? 'Copié !' : result === 'shared' ? 'Partagé !' : 'Partage indisponible');
+  };
+
   return (
     <SafeAreaView style={ui.screen}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} bounces={false}>
-        <Text style={styles.title}>RUN OVER</Text>
-        {summary.record ? <Text style={styles.record}>NEW RECORD!</Text> : null}
+        <Text style={styles.title}>COURSE TERMINÉE</Text>
+        {summary.record ? <Text style={styles.record}>NOUVEAU RECORD !</Text> : null}
+
+        <View style={styles.card}>
+          <Text style={styles.cardKicker}>CARTE DE RUN</Text>
+          <Text style={styles.cardScore}>{lastScore} pts</Text>
+          <Text style={styles.cardMeta}>
+            {summary.distance} m · Niv. {summary.level} · Combo x{summary.bestCombo}
+          </Text>
+        </View>
 
         <View style={styles.panel}>
           <Stat label="SCORE" value={String(lastScore)} />
           <Stat label="DISTANCE" value={`${summary.distance} m`} />
-          <Stat label="LEVEL" value={String(summary.level)} />
-          <Stat label="BEST COMBO" value={`x${summary.bestCombo}`} />
-          <Stat label="DUMBBELLS" value={`+${summary.coins}`} accent />
-          <Stat label="BEST SCORE" value={String(bestScore)} />
-          <Stat label="TOTAL DUMBBELLS" value={String(totalCoins)} accent />
+          <Stat label="NIVEAU" value={String(summary.level)} />
+          <Stat label="MEILLEUR COMBO" value={`x${summary.bestCombo}`} />
+          <Stat label="HALTÈRES" value={`+${summary.coins}`} accent />
+          <Stat label="MEILLEUR SCORE" value={String(bestScore)} />
+          <Stat label="TOTAL HALTÈRES" value={String(totalCoins)} accent />
         </View>
 
         {teaser ? <UnlockTeaserCard teaser={teaser} /> : null}
 
         <Pressable style={ui.primaryBtn} onPress={onRestart}>
-          <Text style={ui.primaryBtnText}>PLAY AGAIN</Text>
+          <Text style={ui.primaryBtnText}>REJOUER</Text>
         </Pressable>
+        <Pressable style={ui.secondaryBtn} onPress={onShare}>
+          <Text style={ui.secondaryBtnText}>PARTAGER</Text>
+        </Pressable>
+        {shareNote ? <Text style={styles.shareNote}>{shareNote}</Text> : null}
         <Pressable style={ui.secondaryBtn} onPress={onHome}>
-          <Text style={ui.secondaryBtnText}>HOME</Text>
+          <Text style={ui.secondaryBtnText}>ACCUEIL</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -87,6 +108,35 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 460,
     alignSelf: 'center',
+  },
+  card: {
+    backgroundColor: colors.yellow,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardKicker: {
+    ...display,
+    color: colors.black,
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  cardScore: {
+    ...display,
+    color: colors.black,
+    fontSize: 36,
+  },
+  cardMeta: {
+    ...display,
+    color: colors.black,
+    fontSize: 14,
+  },
+  shareNote: {
+    ...display,
+    color: colors.green,
+    fontSize: 14,
+    textAlign: 'center',
   },
   title: {
     ...display,

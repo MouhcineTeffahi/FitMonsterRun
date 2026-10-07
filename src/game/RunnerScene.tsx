@@ -3,7 +3,11 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import { StyleSheet } from 'react-native';
 import * as THREE from 'three';
 
+import type { GhostSample } from '../data/retention';
+import type { Upgrades } from '../data/shop';
+import { DEFAULT_UPGRADES } from '../data/shop';
 import type { SkinDef } from '../data/skins';
+import { haptic } from './audio/haptics';
 import { playEventSfx } from './audio/sfx';
 import { PostFx } from './fx/PostFx';
 import { resetQuality, trackFrame } from './fx/quality';
@@ -11,7 +15,7 @@ import { Vfx, type BurstKind, type VfxHandle } from './fx/Vfx';
 import { useObstaclePools } from './obstacles/EntityPools';
 import { Player, type PlayerFrame, type PlayerHandle } from './player/Player';
 import { createSlots, LANE_X, PLAYER_Z, POOL_SIZES, type Slot, type Variant3D } from './sim/patterns';
-import { BASE_SPEED, createRunState, levelGoalFor, SPACE_BONUS, stepRun, type RunEvent, type RunStats } from './sim/runSim';
+import { BASE_SPEED, createRunState, levelGoalFor, reviveRun, SPACE_BONUS, stepRun, type RunEvent, type RunStats } from './sim/runSim';
 import { ENV, FOG_LIMIT, type Biome } from './world/biomes';
 import { World, type WorldHandle } from './world/World';
 
@@ -25,6 +29,9 @@ export type RunControls = {
   paused: boolean;
   /** Level-complete overlay: sim paused, hero dances. */
   celebrate: boolean;
+  reviveQueued: boolean;
+  reviveDeclined: boolean;
+  ghostSamples: GhostSample[];
 };
 
 type Props = {
@@ -38,6 +45,10 @@ type Props = {
   onReady?: () => void;
   /** False when post-processing is bypassed (show a 2D vignette instead). */
   onPostFx?: (active: boolean) => void;
+  /** Place rotation for this run (must be set before the world mounts). */
+  biomes: readonly Biome[];
+  upgrades?: Upgrades;
+  ghost?: GhostSample[] | null;
 };
 
 const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
@@ -60,7 +71,11 @@ const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
   burp: 'burp',
   bonk: 'stars',
   nearMiss: 'nearMiss',
-  combo: 'coin',
+  combo: 'power',
+  creatine: 'power',
+  prework: 'protein',
+  magnet: 'protein',
+  gymZone: 'confetti',
 };
 
 const BURST_Y: Partial<Record<RunEvent, number>> = { coin: 1.1, level: 2.5, convert: 1.2, space: 2.5, burp: 1.4, bonk: 1.9 };
@@ -73,6 +88,7 @@ const ARCH_BEHIND = 16;
 const ARCH_LEAD = 7;
 
 export function RunnerScene(props: Props) {
+  const start = ENV[props.biomes[0] ?? 'city'];
   return (
     <Canvas
       style={StyleSheet.absoluteFill}
@@ -81,8 +97,8 @@ export function RunnerScene(props: Props) {
       dpr={[1, 2]}
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05, antialias: true }}
     >
-      <color attach="background" args={[ENV.city.horizon]} />
-      <fog attach="fog" args={[ENV.city.fog, ENV.city.near, ENV.city.far]} />
+      <color attach="background" args={[start.horizon]} />
+      <fog attach="fog" args={[start.fog, start.near, start.far]} />
       <Suspense fallback={null}>
         <Game {...props} />
       </Suspense>
@@ -90,7 +106,7 @@ export function RunnerScene(props: Props) {
   );
 }
 
-function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, onPostFx }: Props) {
+function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, onPostFx, biomes, upgrades, ghost }: Props) {
   const { camera, scene, gl } = useThree();
   const player = useRef<PlayerHandle>(null);
   const world = useRef<WorldHandle>(null);
@@ -107,12 +123,24 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     return u;
   }, []);
   const slots = useRef<Slot[]>(createSlots());
-  const run = useRef(createRunState());
+  const run = useRef(createRunState(upgrades ?? DEFAULT_UPGRADES));
   const ended = useRef(false);
   const deathT = useRef(0);
   const statsTimer = useRef(0);
   const fovPunch = useRef(0);
+  const slowMo = useRef(0);
+  const juiceLeft = useRef(2);
+  const ghostD = useRef(0);
   const clock = useRef(0);
+  const ghostMesh = useMemo(() => {
+    const m = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.38, 1.15, 4, 8),
+      new THREE.MeshBasicMaterial({ color: '#FFE082', transparent: true, opacity: 0.32, depthWrite: false }),
+    );
+    m.visible = false;
+    m.position.set(0, 1.1, PLAYER_Z - 0.4);
+    return m;
+  }, []);
   const lastBiome = useRef<Biome | null>(null);
   const auditFrames = useRef(0);
   const scratch = useMemo(
@@ -120,7 +148,7 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     [],
   );
   const frame = useMemo<PlayerFrame>(
-    () => ({ airborne: false, runRate: 1, sliding: false, hitT: 99, dead: false, celebrate: false, attack: 0 as const, attackSide: 1 as const, attackT: 99, x: 0, y: 0, vx: 0, ground: 0, power: 0, dz: 0 }),
+        () => ({ airborne: false, runRate: 1, sliding: false, hitT: 99, dead: false, celebrate: false, attack: 0 as const, attackSide: 1 as const, attackT: 99, x: 0, y: 0, vx: 0, ground: 0, power: 0, bulk: 0, onBike: false, dz: 0, shield: 0, level: 1 }),
     [],
   );
 
@@ -152,12 +180,28 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
   const emit = useCallback(
     (event: RunEvent) => {
       const s = run.current;
+      const cheap = event === 'coin' || event === 'healthy';
+      if (cheap && juiceLeft.current <= 0) return;
+      if (cheap) juiceLeft.current -= 1;
       const burst = BURST_FOR[event];
       if (burst) vfx.current?.burst(burst, s.x, s.y + (BURST_Y[event] ?? 0.15), PLAYER_Z - 0.2);
-      if (event === 'speedup' || event === 'power' || event === 'combo') fovPunch.current = 10;
-      if (event === 'nearMiss') fovPunch.current = Math.max(fovPunch.current, 6);
-      if (event === 'hit') s.shake = Math.max(s.shake, 0.55);
-      if (event === 'nearMiss') s.shake = Math.max(s.shake, 0.22);
+      if (event === 'speedup' || event === 'power') fovPunch.current = 8;
+      if (event === 'combo') fovPunch.current = Math.max(fovPunch.current, 1.6);
+      if (event === 'bike' || event === 'slap' || event === 'kick' || event === 'smash') {
+        fovPunch.current = Math.max(fovPunch.current, 7);
+      }
+      if (event === 'nearMiss') {
+        fovPunch.current = Math.max(fovPunch.current, 6);
+        s.shake = Math.max(s.shake, 0.22);
+        slowMo.current = 0.32;
+        haptic('medium');
+      }
+      if (event === 'hit') {
+        s.shake = Math.max(s.shake, 0.55);
+        haptic('heavy');
+      }
+      if (event === 'coin' || event === 'healthy' || event === 'magnet' || event === 'creatine' || event === 'prework') haptic('light');
+      if (event === 'combo' || event === 'power' || event === 'level') haptic('success');
       playEventSfx(event);
       onEvent(event);
     },
@@ -186,7 +230,12 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
 
   useFrame((_, rawDt) => {
     const c = controls.current;
-    const dt = Math.min(rawDt, 0.05);
+    juiceLeft.current = 2;
+    let dt = Math.min(rawDt, 0.05);
+    if (slowMo.current > 0) {
+      dt *= 0.38;
+      slowMo.current = Math.max(0, slowMo.current - rawDt);
+    }
     const s = run.current;
     trackFrame(dt);
 
@@ -202,6 +251,12 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     }
     frame.celebrate = false;
     clock.current += dt;
+
+    if (s.dead && c.reviveQueued) {
+      c.reviveQueued = false;
+      reviveRun(s);
+      deathT.current = 0;
+    }
 
     const prevDistance = s.stats.distance;
     if (stepRun(s, slots.current, c, dt, emit)) bindInstances();
@@ -220,11 +275,36 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     frame.vx = s.vx;
     frame.ground = s.ground;
     frame.power = s.stats.power;
+    frame.bulk = s.stats.bulk;
+    frame.onBike = s.onBike;
     frame.attack = s.attack;
     frame.attackSide = s.attackSide;
     frame.attackT = s.attackT;
     frame.dz = dz;
+    frame.shield = s.shieldT;
+    frame.level = s.stats.level;
     player.current?.update(dt, frame);
+
+    if (s.stats.distance - ghostD.current >= 8) {
+      ghostD.current = s.stats.distance;
+      c.ghostSamples.push({ d: s.stats.distance, lane: c.lane, y: s.y });
+      if (c.ghostSamples.length > 220) c.ghostSamples.splice(0, c.ghostSamples.length - 220);
+    }
+    if (ghost && ghost.length >= 4) {
+      const d = s.stats.distance;
+      let i = 0;
+      while (i < ghost.length - 2 && ghost[i + 1].d < d) i += 1;
+      const a = ghost[i];
+      const b = ghost[i + 1] ?? a;
+      const span = Math.max(0.01, b.d - a.d);
+      const t = Math.max(0, Math.min(1, (d - a.d) / span));
+      ghostMesh.visible = !s.dead;
+      ghostMesh.position.x = LANE_X[a.lane as 0 | 1 | 2] * (1 - t) + LANE_X[b.lane as 0 | 1 | 2] * t;
+      ghostMesh.position.y = a.y * (1 - t) + b.y * t + 1.05;
+      ghostMesh.position.z = PLAYER_Z - 0.55;
+    } else {
+      ghostMesh.visible = false;
+    }
 
     const t = clock.current;
     for (const slot of slots.current) {
@@ -307,9 +387,9 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     camera.position.x += (followX - camera.position.x) * Math.min(1, dt * 6.5) + shakeX;
     const camY = 4.35 + s.y * 0.82 - (sliding ? 0.62 : 0) + (s.stats.power > 0 ? 0.15 : 0);
     camera.position.y += (camY - camera.position.y) * Math.min(1, dt * 7) + shakeY;
-    const camZ = s.dead ? 9.8 : 7.55 - Math.min(0.55, (s.speed - BASE_SPEED) * 0.025);
+    const camZ = s.dead ? 9.8 : 7.48 - Math.min(0.7, (s.speed - BASE_SPEED) * 0.034) - (s.onBike ? 0.16 : 0);
     camera.position.z += (camZ - camera.position.z) * Math.min(1, dt * 3.4);
-    const ahead = 10.5 + (s.speed - BASE_SPEED) * 0.28;
+    const ahead = 10.6 + (s.speed - BASE_SPEED) * 0.3;
     scratch.look.set(s.x * 0.48 + laneTarget * 0.08, 1.35 + s.y * 0.75, -ahead);
     camera.lookAt(scratch.look);
     camera.rotateZ((laneTarget - s.x) * 0.032 + s.vx * -0.004);
@@ -317,10 +397,11 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     const persp = camera as THREE.PerspectiveCamera;
     const fov =
       BASE_FOV +
-      (s.speed - BASE_SPEED) * 0.42 +
+      (s.speed - BASE_SPEED) * 0.46 +
       fovPunch.current +
       (s.stats.power > 0 ? 5 : 0) +
-      (s.stats.combo >= 8 ? 2 : 0);
+      (s.stats.combo >= 8 ? 2.4 : 0) +
+      (s.onBike ? 3 : 0);
     if (Math.abs(persp.fov - fov) > 0.01) {
       persp.fov += (fov - persp.fov) * Math.min(1, dt * 7);
       persp.updateProjectionMatrix();
@@ -335,6 +416,7 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
     }
 
     if (s.dead) {
+      if (!c.reviveDeclined) return;
       deathT.current += dt;
       if (deathT.current >= DEATH_DELAY) {
         ended.current = true;
@@ -353,12 +435,12 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
 
   return (
     <>
-      <hemisphereLight ref={hemi} args={['#CDEBFF', '#F1C9A0', ENV.city.hemi]} />
+      <hemisphereLight ref={hemi} args={['#CDEBFF', '#F1C9A0', ENV[biomes[0] ?? 'city'].hemi]} />
       <directionalLight
         ref={sun}
         color="#FFF0D4"
         position={[6, 14, 5]}
-        intensity={ENV.city.sun}
+        intensity={ENV[biomes[0] ?? 'city'].sun}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0006}
@@ -371,8 +453,9 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
         shadow-camera-far={45}
       />
       <pointLight ref={neon} color="#FF2E88" intensity={0} distance={14} decay={1.5} />
-      <World ref={world} />
+      <World ref={world} biomes={biomes} />
       <Player ref={player} skin={skin} />
+      <primitive object={ghostMesh} />
       <primitive object={pools.group} />
       <Vfx ref={vfx} />
       <PostFx onActive={onPostFx} />

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
@@ -10,10 +11,12 @@ import Animated, {
 
 import { MISSIONS, type ChallengeStat } from '../data/challenges';
 import { paintedSkin } from '../data/playerColors';
+import { withAccessory } from '../data/shop';
 import { getSkin } from '../data/skins';
 import { getSpace } from '../data/spaces';
 import { colors, MAX_ENERGY } from '../data/theme';
 import type { RunSummary } from '../data/types';
+import { haptic } from '../game/audio/haptics';
 import {
   RunnerScene,
   type PickupEvent,
@@ -21,13 +24,15 @@ import {
   type RunStats,
 } from '../game/RunnerScene';
 import { clampLane } from '../game/sim/patterns';
-import { BASE_SPEED, LEVEL_BONUS_COINS, NEAR_MISS_COINS, SLAP_COINS, SPACE_BONUS, levelGoalFor } from '../game/sim/runSim';
-import { BIOME_NAME, setBiomeOrder, type Biome } from '../game/world/biomes';
+import { BASE_SPEED, LEVEL_BONUS_COINS, NEAR_MISS_COINS, REVIVE_COST, SLAP_COINS, SPACE_BONUS, levelGoalFor } from '../game/sim/runSim';
+import { BIOME_NAME, type Biome } from '../game/world/biomes';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
 import { HUD, type MissionView } from '../ui/HUD';
 import { LevelComplete } from '../ui/LevelComplete';
+import { ReviveOverlay } from '../ui/ReviveOverlay';
 import { SpeedLines } from '../ui/SpeedLines';
+import { TutorialOverlay } from '../ui/TutorialOverlay';
 import { Vignette } from '../ui/Vignette';
 
 type Props = {
@@ -54,32 +59,45 @@ const INITIAL_STATS: RunStats = {
   combo: 0,
   bestCombo: 0,
   nearMisses: 0,
+  bulk: 0,
+  comboT: 0,
+  comboMult: 1,
+  magnet: 0,
+  shield: 0,
+  boost: 0,
 };
 
 type Toast = { text: string; color: string };
 
 const TOASTS: Partial<Record<PickupEvent, Toast>> = {
-  healthy: { text: 'HEALTHY! +ENERGY', color: colors.green },
-  protein: { text: 'PROTEIN! 💪', color: colors.protein },
-  roof: { text: 'ON THE TRUCK!', color: colors.yellow },
-  platform: { text: 'PLATFORM!', color: '#00E5FF' },
-  smash: { text: 'SMASH!', color: '#FF7A45' },
-  lowEnergy: { text: 'LOW ENERGY!', color: colors.red },
+  healthy: { text: 'SANTÉ ! +ÉNERGIE', color: colors.green },
+  protein: { text: 'PROTÉINE ! CORPS SEC', color: colors.protein },
+  roof: { text: 'SUR LE CAMION !', color: colors.yellow },
+  platform: { text: 'PLATEFORME !', color: '#00E5FF' },
+  smash: { text: 'SMASH !', color: '#FF7A45' },
+  bike: { text: 'À VÉLO ! BALADE !', color: '#FF3B4A' },
+  lowEnergy: { text: 'ÉNERGIE FAIBLE ! MANGE !', color: colors.red },
+  speedup: { text: 'ÇA ACCÉLÈRE !', color: colors.yellowBright },
+  magnet: { text: 'WHEY ! VITESSE + AIMANT', color: colors.protein },
+  creatine: { text: 'CRÉATINE ! BOUCLIER OR', color: '#FFE082' },
+  prework: { text: 'PRE-WORKOUT ! x2 SCORE', color: '#FF3D6E' },
+  gymZone: { text: 'ZONE GYM !', color: colors.yellowBright },
 };
 
 /** Events with several silly lines; one is picked at random each time. */
 const FUNNY: Partial<Record<PickupEvent, { lines: string[]; color: string }>> = {
-  slap: { lines: [`PAF! GO TRAIN! +${SLAP_COINS}🪙`, `WAKE UP & LIFT! +${SLAP_COINS}🪙`, `NO MORE COUCH! +${SLAP_COINS}🪙`], color: '#FF8A3D' },
-  kick: { lines: [`YEET! 🦵 +${SLAP_COINS}🪙`, `LEG DAY! +${SLAP_COINS}🪙`, `CARDIO TIME! +${SLAP_COINS}🪙`], color: '#FF8A3D' },
-  convert: { lines: ['CONVERTED! JOGGING BUDDY 🏃', 'NEW GYM BRO! 🏃', 'HE LIKES CARDIO NOW! 🏃'], color: colors.green },
-  burp: { lines: ['BURP! 🤢', 'CHEAT DAY?!', 'SO MUCH GREASE!'], color: colors.red },
-  bonk: { lines: ['BONK! 💫', 'OUCH, MY GAINS!', 'WHO PUT THAT THERE?!'], color: colors.red },
-  power: { lines: ['POWER MODE! ⚡', 'BEAST MODE! 🦍', 'GAINS UNLOCKED! 💪'], color: colors.power },
+  slap: { lines: [`PAF ! VA SPORT ! +${SLAP_COINS}🪙`, `RÉVEILLE-TOI ! +${SLAP_COINS}🪙`, `PLUS DE CANAPÉ ! +${SLAP_COINS}🪙`], color: '#FF8A3D' },
+  kick: { lines: [`ENVOYÉ ! 🦵 +${SLAP_COINS}🪙`, `JOUR JAMBES ! +${SLAP_COINS}🪙`, `CARDIO ! +${SLAP_COINS}🪙`], color: '#FF8A3D' },
+  convert: { lines: ['CONVERTI ! POTES JOGGING 🏃', 'NOUVEAU GYM BRO ! 🏃', 'IL KIFE LE CARDIO ! 🏃'], color: colors.green },
+  burp: { lines: ['ROT ! 🤢', 'JOUR CHEAT ?!', 'TROP DE GRAISSE !'], color: colors.red },
+  bonk: { lines: ['BONK ! 💫', 'AÏE, MES GAINS !', 'QUI A MIS ÇA LÀ ?!'], color: colors.red },
+  power: { lines: ['MODE POWER ! ⚡', 'BEAST MODE ! 🦍', 'LES GAINS ! 💪'], color: colors.power },
+  combo: { lines: ['ENCORE ! 🔥', 'TU ASSURES ! 💪', 'NE LÂCHE RIEN !'], color: colors.yellowBright },
   nearMiss: {
     lines: [
-      `CLOSE CALL! +${NEAR_MISS_COINS}🪙`,
-      `TOO CLOSE! +${NEAR_MISS_COINS}🪙`,
-      `NINJA DODGE! +${NEAR_MISS_COINS}🪙`,
+      `ESQUIVE NINJA ! +${NEAR_MISS_COINS}🪙`,
+      `PRESQUE ! +${NEAR_MISS_COINS}🪙`,
+      `NINJA DODGE ! +${NEAR_MISS_COINS}🪙`,
     ],
     color: '#7CFF6B',
   },
@@ -105,14 +123,20 @@ export function GameScreen({ onGameOver }: Props) {
   const addCoins = useProgressStore((s) => s.addCoins);
   const resetRun = useProgressStore((s) => s.resetRun);
   const recordRun = useProgressStore((s) => s.recordRun);
+  const upgrades = useProgressStore((s) => s.upgrades);
+  const selectedAccessory = useProgressStore((s) => s.selectedAccessory);
+  const ghost = useProgressStore((s) => s.ghost);
+  const totalCoins = useProgressStore((s) => s.totalCoins);
+  const spendCoins = useProgressStore((s) => s.spendCoins);
+  const tutorialDone = useProgressStore((s) => s.tutorialDone);
+  const completeTutorial = useProgressStore((s) => s.completeTutorial);
   const skin = useMemo(
-    () => paintedSkin(getSkin(selectedSkin), playerColors),
-    [selectedSkin, playerColors],
+    () => withAccessory(paintedSkin(getSkin(selectedSkin), playerColors), selectedAccessory),
+    [selectedSkin, playerColors, selectedAccessory],
   );
 
   const selectedSpace = useProgressStore((s) => s.selectedSpace);
-  // The world reads the rotation while mounting, so set it before the first render of the scene.
-  useState(() => setBiomeOrder(getSpace(selectedSpace).biomes));
+  const spaceBiomes = getSpace(selectedSpace).biomes;
   const [biome, setBiome] = useState<Biome | null>(null);
   const firstBiome = useRef(true);
   const [paused, setPaused] = useState(false);
@@ -123,6 +147,9 @@ export function GameScreen({ onGameOver }: Props) {
   const [hint, setHint] = useState(true);
   const [intro, setIntro] = useState<IntroStep>(null);
   const [levelDone, setLevelDone] = useState<{ level: number; score: number } | null>(null);
+  const [reviveOffer, setReviveOffer] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(!tutorialDone);
+  const usedRevive = useRef(false);
   const [missionIdx, setMissionIdx] = useState(0);
   const missionBase = useRef(0);
   const missionIdxRef = useRef(0);
@@ -137,6 +164,9 @@ export function GameScreen({ onGameOver }: Props) {
     slideQueued: false,
     paused: true,
     celebrate: false,
+    reviveQueued: false,
+    reviveDeclined: false,
+    ghostSamples: [],
   });
   const endedRef = useRef(false);
   const introStarted = useRef(false);
@@ -164,7 +194,7 @@ export function GameScreen({ onGameOver }: Props) {
 
   useEffect(() => {
     if (intro === null) return;
-    const ms = intro === 'go' ? 480 : 650;
+    const ms = intro === 'go' ? 360 : 420;
     const id = setTimeout(() => {
       setIntro((cur) => {
         if (cur === 3) return 2;
@@ -176,8 +206,8 @@ export function GameScreen({ onGameOver }: Props) {
     return () => clearTimeout(id);
   }, [intro]);
 
-  const counting = !ready || intro !== null || !introStarted.current;
-  userPaused.current = paused;
+  const counting = !ready || intro !== null || !introStarted.current || showTutorial;
+  userPaused.current = paused || reviveOffer;
   introOn.current = counting;
 
   useEffect(() => {
@@ -250,7 +280,7 @@ export function GameScreen({ onGameOver }: Props) {
       const def = MISSIONS[missionIdxRef.current % MISSIONS.length];
       if (statValue(next, def.stat) - missionBase.current < def.target) return;
       bonusCoins.current += def.reward;
-      showToast({ text: `MISSION COMPLETE! +${def.reward}`, color: colors.green }, 1800);
+      showToast({ text: `MISSION RÉUSSIE ! +${def.reward}`, color: colors.green }, 1800);
       missionIdxRef.current += 1;
       const following = MISSIONS[missionIdxRef.current % MISSIONS.length];
       missionBase.current = statValue(next, following.stat);
@@ -285,31 +315,31 @@ export function GameScreen({ onGameOver }: Props) {
         setLevelDone({ level: levelsDone.current, score: statsRef.current.score });
         return;
       }
-      if (event === 'combo') {
-        showToast({ text: `COMBO x${statsRef.current.combo} !`, color: colors.yellowBright });
-        flashColor.value = 1;
-        flash.value = withSequence(
-          withTiming(0.28, { duration: 50 }),
-          withTiming(0, { duration: 280 }),
-        );
+      if (event === 'death') {
+        if (!usedRevive.current) {
+          setReviveOffer(true);
+        } else {
+          controls.current.reviveDeclined = true;
+        }
         return;
       }
       if (event === 'nearMiss') {
         flashColor.value = 1;
         flash.value = withSequence(
-          withTiming(0.18, { duration: 40 }),
+          withTiming(0.22, { duration: 40 }),
           withTiming(0, { duration: 220 }),
         );
       }
-      if (event === 'hit' || event === 'power') {
-        flashColor.value = event === 'hit' ? 0 : 1;
+      if (event === 'hit' || event === 'power' || event === 'lowEnergy') {
+        flashColor.value = event === 'power' ? 1 : 0;
         flash.value = withSequence(
-          withTiming(event === 'hit' ? 0.45 : 0.35, { duration: 60 }),
-          withTiming(0, { duration: 320 }),
+          withTiming(event === 'hit' ? 0.5 : event === 'lowEnergy' ? 0.32 : 0.38, { duration: 55 }),
+          withTiming(0, { duration: event === 'lowEnergy' ? 420 : 320 }),
         );
       }
       const t = toastFor(event);
-      if (t) showToast(t);
+      // Everyday bites stay in the HUD; toasts are for bigger moments.
+      if (t && event !== 'healthy') showToast(t, event === 'lowEnergy' || event === 'gymZone' ? 2000 : 1400);
     },
     [flash, flashColor, showToast],
   );
@@ -347,6 +377,8 @@ export function GameScreen({ onGameOver }: Props) {
         distance: final.distance,
         coins: final.coins,
         roofs: final.roofs,
+        bestCombo: final.bestCombo,
+        ghost: controls.current.ghostSamples,
       });
       const earned = final.coins + bonusCoins.current;
       if (earned > 0) addCoins(earned);
@@ -363,8 +395,32 @@ export function GameScreen({ onGameOver }: Props) {
 
   const quit = useCallback(() => {
     controls.current.paused = true;
+    controls.current.reviveDeclined = true;
     handleGameOver(statsRef.current);
   }, [handleGameOver]);
+
+  const onRevive = useCallback(() => {
+    if (usedRevive.current) return;
+    if (!spendCoins(REVIVE_COST)) {
+      controls.current.reviveDeclined = true;
+      setReviveOffer(false);
+      return;
+    }
+    usedRevive.current = true;
+    controls.current.reviveQueued = true;
+    setReviveOffer(false);
+    haptic('success');
+  }, [spendCoins]);
+
+  const onGiveUp = useCallback(() => {
+    controls.current.reviveDeclined = true;
+    setReviveOffer(false);
+  }, []);
+
+  const finishTutorial = useCallback(() => {
+    setShowTutorial(false);
+    completeTutorial();
+  }, [completeTutorial]);
 
   const flashStyle = useAnimatedStyle(() => ({
     opacity: flash.value,
@@ -385,6 +441,7 @@ export function GameScreen({ onGameOver }: Props) {
         <View style={styles.stage} collapsable={false}>
           <RunnerScene
             skin={skin}
+            biomes={spaceBiomes}
             controls={controls}
             onStats={onStats}
             onEvent={onEvent}
@@ -392,12 +449,14 @@ export function GameScreen({ onGameOver }: Props) {
             onGameOver={handleGameOver}
             onReady={onReady}
             onPostFx={setPostFx}
+            upgrades={upgrades}
+            ghost={ghost}
           />
         </View>
       </GestureDetector>
 
       {!postFx ? <Vignette /> : null}
-      <SpeedLines speed={stats.speed} combo={stats.combo} />
+      <SpeedLines speed={stats.speed} combo={stats.combo} powered={stats.power > 0} />
       <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
 
       {toast && !levelDone ? (
@@ -410,16 +469,12 @@ export function GameScreen({ onGameOver }: Props) {
         <HUD stats={stats} mission={mission} paused={paused} onPause={togglePause} space={biome ? BIOME_NAME[biome] : null} />
       )}
 
-      {intro !== null ? (
-        <View style={styles.intro} pointerEvents="none">
-          <Text style={styles.introText}>{intro === 'go' ? 'GO!' : intro}</Text>
-        </View>
-      ) : null}
+      {intro !== null ? <IntroBurst step={intro} /> : null}
 
       {hint && ready && !levelDone && intro === null ? (
         <View style={styles.hint} pointerEvents="none">
           <Text style={styles.hintText}>
-            Slap couch potatoes: +{SLAP_COINS} coins! · Slide to kick
+            Entre dans un vélo pour rouler · Glisse pour descendre
           </Text>
         </View>
       ) : null}
@@ -435,7 +490,7 @@ export function GameScreen({ onGameOver }: Props) {
 
       {!ready ? (
         <View style={styles.loading} pointerEvents="none">
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>Chargement…</Text>
         </View>
       ) : null}
 
@@ -443,13 +498,43 @@ export function GameScreen({ onGameOver }: Props) {
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>PAUSE</Text>
           <Pressable style={styles.pauseBtn} onPress={() => setPaused(false)}>
-            <Text style={styles.pauseBtnTextDark}>RESUME</Text>
+            <Text style={styles.pauseBtnTextDark}>REPRENDRE</Text>
           </Pressable>
           <Pressable style={[styles.pauseBtn, styles.quitBtn]} onPress={quit}>
-            <Text style={styles.pauseBtnText}>QUIT</Text>
+            <Text style={styles.pauseBtnText}>QUITTER</Text>
           </Pressable>
         </View>
       ) : null}
+
+      {showTutorial && intro === null ? <TutorialOverlay onDone={finishTutorial} /> : null}
+
+      {reviveOffer ? (
+        <ReviveOverlay coins={totalCoins} onContinue={onRevive} onGiveUp={onGiveUp} />
+      ) : null}
+    </View>
+  );
+}
+
+function IntroBurst({ step }: { step: Exclude<IntroStep, null> }) {
+  const scale = useSharedValue(0.45);
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    scale.value = 0.45;
+    opacity.value = 1;
+    scale.value = withTiming(1.08, { duration: 160, easing: Easing.out(Easing.back(2.2)) });
+    if (step === 'go') {
+      opacity.value = withTiming(0, { duration: 280 });
+    }
+  }, [step, scale, opacity]);
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+  return (
+    <View style={styles.intro} pointerEvents="none">
+      <Animated.Text style={[styles.introText, step === 'go' && styles.introGo, style]}>
+        {step === 'go' ? 'ALLEZ !' : step}
+      </Animated.Text>
     </View>
   );
 }
@@ -503,10 +588,14 @@ const styles = StyleSheet.create({
   introText: {
     ...display,
     color: colors.yellow,
-    fontSize: 72,
+    fontSize: 84,
     textShadowColor: '#000',
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 0,
+  },
+  introGo: {
+    color: colors.green,
+    fontSize: 92,
   },
   hint: {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -10,17 +10,19 @@ import Animated, {
 
 import { DAILY_CHALLENGES, todayKey } from '../data/challenges';
 import { paintedSkin } from '../data/playerColors';
+import { withAccessory } from '../data/shop';
 import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
-import { nextUnlockTeaser } from '../data/unlockTeasers';
+import { playSfx } from '../game/audio/sfx';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
+import { ChestModal } from '../ui/ChestModal';
 import { DumbbellMark } from '../ui/DumbbellMark';
 import { display } from '../ui/fonts';
+import { LoginStreak } from '../ui/LoginStreak';
 import { Logo } from '../ui/Logo';
 import { MenuBackdrop } from '../ui/MenuBackdrop';
 import { SpacePicker } from '../ui/SpacePicker';
-import { UnlockTeaserCard } from '../ui/UnlockTeaserCard';
 import { ui } from '../utils/styles';
 
 type Props = {
@@ -36,18 +38,18 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const selectedSkin = useProgressStore((s) => s.selectedSkin);
   const playerColors = useProgressStore((s) => s.playerColors);
-  const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
-  const unlockedSpaces = useProgressStore((s) => s.unlockedSpaces);
   const soundEnabled = useProgressStore((s) => s.soundEnabled);
   const toggleSound = useProgressStore((s) => s.toggleSound);
   const daily = useProgressStore((s) => s.daily);
+  const login = useProgressStore((s) => s.login);
+  const claimLogin = useProgressStore((s) => s.claimLogin);
+  const pendingChest = useProgressStore((s) => s.pendingChest);
+  const openChest = useProgressStore((s) => s.openChest);
+  const selectedAccessory = useProgressStore((s) => s.selectedAccessory);
+  const [chestReward, setChestReward] = useState(0);
   const skin = useMemo(
-    () => paintedSkin(getSkin(selectedSkin), playerColors),
-    [selectedSkin, playerColors],
-  );
-  const teaser = useMemo(
-    () => nextUnlockTeaser(totalCoins, unlockedSkins, unlockedSpaces),
-    [totalCoins, unlockedSkins, unlockedSpaces],
+    () => withAccessory(paintedSkin(getSkin(selectedSkin), playerColors), selectedAccessory),
+    [selectedSkin, playerColors, selectedAccessory],
   );
 
   const today = daily.date === todayKey() ? daily : null;
@@ -57,23 +59,39 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
       ).length
     : 0;
 
+  useEffect(() => {
+    if (pendingChest) setChestReward(openChest());
+  }, [pendingChest, openChest]);
+
   const pulse = useSharedValue(1);
+  const playPulse = useSharedValue(1);
   useEffect(() => {
     pulse.value = withRepeat(
       withTiming(1.08, { duration: 1600, easing: Easing.inOut(Easing.sin) }),
       -1,
       true,
     );
-  }, [pulse]);
+    playPulse.value = withRepeat(
+      withTiming(1.035, { duration: 900, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, [pulse, playPulse]);
   const glowStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
     opacity: 0.35 + (pulse.value - 1) * 2,
+  }));
+  const playStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: playPulse.value }],
   }));
 
   return (
     <View style={ui.screen}>
       <MenuBackdrop />
-      <Animated.View style={[styles.heroGlow, glowStyle, { backgroundColor: playerColors.body }]} />
+      <Animated.View
+        style={[styles.heroGlow, glowStyle, { backgroundColor: playerColors.body }]}
+        pointerEvents="none"
+      />
       <MonsterShowcase skin={skin} mode="hero" floor={false} style={styles.hero} />
       <SafeAreaView style={styles.safe}>
         <View style={styles.topBar}>
@@ -85,7 +103,7 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
             style={styles.iconBtn}
             onPress={toggleSound}
             accessibilityRole="button"
-            accessibilityLabel={soundEnabled ? 'Mute sound' : 'Unmute sound'}
+            accessibilityLabel={soundEnabled ? 'Couper le son' : 'Activer le son'}
           >
             <Text style={styles.iconText}>{soundEnabled ? '🔊' : '🔇'}</Text>
           </Pressable>
@@ -94,29 +112,41 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
         <View style={styles.brand}>
           <Logo width={270} />
           <Text style={styles.tagline}>
-            RUN. EAT CLEAN.{'\n'}BECOME THE BEST{'\n'}VERSION OF YOU!
+            COURS. MANGE CLEAN.{'\n'}DEVIENS LA MEILLEURE{'\n'}VERSION DE TOI !
           </Text>
         </View>
 
         <View style={styles.flex} />
 
-        <View style={styles.menu}>
-          <Text style={styles.best}>BEST SCORE: {bestScore}</Text>
-          {teaser ? <UnlockTeaserCard teaser={teaser} compact /> : null}
-          <SpacePicker />
-          <Pressable style={[ui.primaryBtn, styles.playBtn]} onPress={onPlay} accessibilityRole="button">
-            <Text style={[ui.primaryBtnText, styles.playText]}>PLAY</Text>
-          </Pressable>
+          <View style={styles.menu}>
+            <Text style={styles.best}>MEILLEUR SCORE : {bestScore}</Text>
+            <LoginStreak
+              login={login}
+              onClaim={() => {
+                const n = claimLogin();
+                if (n > 0) playSfx('level');
+              }}
+            />
+            <SpacePicker />
+          </View>
+
+        <View style={styles.actions}>
+          <Animated.View style={[playStyle, styles.playWrap]}>
+            <Pressable style={[ui.primaryBtn, styles.playBtn]} onPress={onPlay} accessibilityRole="button">
+              <Text style={[ui.primaryBtnText, styles.playText]}>JOUER</Text>
+            </Pressable>
+          </Animated.View>
           <View style={styles.row}>
-            <MenuButton label="SHOP" onPress={onShop} />
-            <MenuButton label="COLORS" onPress={onCustomize} />
+            <MenuButton label="BOUTIQUE" onPress={onShop} />
+            <MenuButton label="COULEURS" onPress={onCustomize} />
           </View>
           <View style={styles.row}>
-            <MenuButton label="CHALLENGES" onPress={onChallenges} badge={claimable} />
-            <MenuButton label="🏆  RANKS" onPress={onLeaderboard} />
+            <MenuButton label="DÉFIS" onPress={onChallenges} badge={claimable} />
+            <MenuButton label="🏆  CLASSEMENT" onPress={onLeaderboard} />
           </View>
         </View>
       </SafeAreaView>
+      {chestReward > 0 ? <ChestModal reward={chestReward} onClose={() => setChestReward(0)} /> : null}
     </View>
   );
 }
@@ -144,17 +174,18 @@ const styles = StyleSheet.create({
   heroGlow: {
     position: 'absolute',
     right: '-8%',
-    top: '22%',
-    width: '62%',
-    height: '42%',
+    top: '10%',
+    width: '56%',
+    height: '34%',
     borderRadius: 999,
   },
   hero: {
     position: 'absolute',
-    right: '-14%',
-    top: '12%',
-    width: '90%',
-    height: '68%',
+    right: '-18%',
+    top: '2%',
+    width: '78%',
+    height: '46%',
+    pointerEvents: 'none',
   },
   topBar: {
     flexDirection: 'row',
@@ -210,11 +241,23 @@ const styles = StyleSheet.create({
   },
   menu: {
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 420,
+    zIndex: 8,
+  },
+  actions: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     gap: spacing.sm,
     alignSelf: 'center',
     width: '100%',
     maxWidth: 420,
+    zIndex: 6,
+    backgroundColor: 'transparent',
   },
   best: {
     ...display,
@@ -224,11 +267,14 @@ const styles = StyleSheet.create({
     textShadowColor: '#000',
     textShadowRadius: 3,
   },
+  playWrap: {
+    alignSelf: 'stretch',
+  },
   playBtn: {
-    minHeight: 64,
+    minHeight: 56,
   },
   playText: {
-    fontSize: 30,
+    fontSize: 28,
   },
   row: {
     flexDirection: 'row',
@@ -236,7 +282,7 @@ const styles = StyleSheet.create({
   },
   menuBtn: {
     flex: 1,
-    minHeight: 50,
+    minHeight: 46,
     borderRadius: radii.md,
     backgroundColor: 'rgba(20,29,51,0.94)',
     borderWidth: 2,

@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-import { biomeAt, type Biome } from './biomes';
+import { biomeAt, setBiomeOrder, type Biome } from './biomes';
 import { CityLots } from './CityLots';
 import { checkerTexture } from './kit';
 import { Road } from './Road';
@@ -58,22 +58,26 @@ function finishArch() {
   return g;
 }
 
-export const World = forwardRef<WorldHandle>(function World(_, ref) {
+type WorldProps = { biomes: readonly Biome[] };
+
+export const World = forwardRef<WorldHandle, WorldProps>(function World({ biomes }, ref) {
   const parts = useMemo(() => {
+    setBiomeOrder(biomes);
     const road = new Road();
     const lots = new CityLots();
     const sky = createSky();
     const arch = finishArch();
     return { road, lots, sky, arch };
-  }, []);
+  }, [biomes]);
   const state = useRef({ distance: 0, scrolls: 0, dzSum: 0 });
 
   useEffect(() => () => {
     parts.sky.mesh.geometry.dispose();
   }, [parts]);
 
-  useFrame(({ camera }) => {
+  useFrame(({ camera, clock }) => {
     parts.sky.mesh.position.copy(camera.position);
+    parts.lots.tick(clock.elapsedTime);
   });
 
   useImperativeHandle(

@@ -16,19 +16,27 @@ export function UnlockTeaserCard({ teaser, compact }: Props) {
   return (
     <View style={[styles.card, compact && styles.compact]}>
       <View style={styles.row}>
-        <Text style={styles.kind}>{teaser.kind === 'skin' ? 'SKIN' : 'WORLD'}</Text>
+        <Text style={styles.kind}>{teaser.kind === 'skin' ? 'SKIN' : 'LIEU'}</Text>
         <Text style={styles.cost}>{teaser.cost} 💪</Text>
       </View>
       <Text style={styles.name} numberOfLines={1}>
-        {almost ? `UNLOCK ${teaser.name.toUpperCase()}!` : `NEXT: ${teaser.name.toUpperCase()}`}
+        {almost ? `DÉBLOQUE ${teaser.name.toUpperCase()} !` : `SUIVANT : ${teaser.name.toUpperCase()}`}
       </Text>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${Math.max(6, teaser.progress * 100)}%` }]} />
+        <View
+          style={[
+            styles.fill,
+            almost && styles.fillReady,
+            { width: `${Math.max(6, teaser.progress * 100)}%` },
+          ]}
+        />
       </View>
       <Text style={styles.hint}>
         {almost
-          ? 'You can buy it in the shop'
-          : `${teaser.remaining} more dumbbells to unlock`}
+          ? teaser.kind === 'space'
+            ? 'Appuie sur le lieu pour débloquer'
+            : 'Tu peux l’acheter en boutique'
+          : `Encore ${teaser.remaining} haltères`}
       </Text>
     </View>
   );
@@ -66,7 +74,7 @@ const styles = StyleSheet.create({
   name: {
     ...display,
     color: colors.white,
-    fontSize: 15,
+    fontSize: 16,
   },
   track: {
     height: 8,
@@ -79,6 +87,9 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.yellow,
     borderRadius: 4,
+  },
+  fillReady: {
+    backgroundColor: colors.yellowBright,
   },
   hint: {
     ...display,
