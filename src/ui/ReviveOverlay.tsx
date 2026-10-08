@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../data/theme';
 import { REVIVE_COST } from '../game/sim/runSim';
@@ -7,27 +7,66 @@ import { display } from './fonts';
 
 type Props = {
   coins: number;
-  onContinue: () => void;
+  /** Remaining ad-funded continues this run. */
+  adContinuesLeft: number;
+  onContinueAd: () => Promise<void> | void;
+  onContinueCoins: () => void;
   onGiveUp: () => void;
 };
 
-/** One continue per run: 50 dumbbells, then 2s of invulnerability. */
-export function ReviveOverlay({ coins, onContinue, onGiveUp }: Props) {
-  const can = coins >= REVIVE_COST;
+/** Continue via rewarded ad (limited/run) and/or coin spend. */
+export function ReviveOverlay({
+  coins,
+  adContinuesLeft,
+  onContinueAd,
+  onContinueCoins,
+  onGiveUp,
+}: Props) {
+  const [busy, setBusy] = useState(false);
+  const canCoins = coins >= REVIVE_COST;
+  const canAd = adContinuesLeft > 0;
+
+  const watchAd = async () => {
+    if (!canAd || busy) return;
+    setBusy(true);
+    try {
+      await onContinueAd();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <Text style={styles.title}>ENCORE UN EFFORT !</Text>
-      <Text style={styles.sub}>Une relance · 2 s d’invulnérabilité</Text>
+      <Text style={styles.sub}>Continue la course · 2 s d’invulnérabilité</Text>
+
+      {canAd ? (
+        <Pressable
+          style={[styles.btn, styles.adBtn, busy && styles.disabled]}
+          onPress={() => void watchAd()}
+          disabled={busy}
+          accessibilityRole="button"
+        >
+          {busy ? (
+            <ActivityIndicator color={colors.black} />
+          ) : (
+            <Text style={styles.btnDark}>▶ CONTINUER (PUB) · {adContinuesLeft} restant{adContinuesLeft > 1 ? 's' : ''}</Text>
+          )}
+        </Pressable>
+      ) : null}
+
       <Pressable
-        style={[styles.btn, !can && styles.disabled]}
-        onPress={onContinue}
-        disabled={!can}
+        style={[styles.btn, !canCoins && styles.disabled]}
+        onPress={onContinueCoins}
+        disabled={!canCoins || busy}
         accessibilityRole="button"
       >
         <Text style={styles.btnDark}>CONTINUER · {REVIVE_COST} 💪</Text>
       </Pressable>
-      {!can ? <Text style={styles.need}>Pas assez d’haltères</Text> : null}
-      <Pressable style={styles.ghost} onPress={onGiveUp} accessibilityRole="button">
+      {!canCoins ? <Text style={styles.need}>Pas assez d’haltères</Text> : null}
+
+      <Pressable style={styles.ghost} onPress={onGiveUp} disabled={busy} accessibilityRole="button">
         <Text style={styles.ghostText}>ABANDONNER</Text>
       </Pressable>
     </View>
@@ -63,8 +102,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingVertical: 14,
     paddingHorizontal: 22,
-    minWidth: 240,
+    minWidth: 260,
     alignItems: 'center',
+  },
+  adBtn: {
+    backgroundColor: '#7CFF6B',
+    borderBottomColor: '#2E7D32',
   },
   disabled: {
     opacity: 0.45,
@@ -72,7 +115,8 @@ const styles = StyleSheet.create({
   btnDark: {
     ...display,
     color: colors.black,
-    fontSize: 18,
+    fontSize: 16,
+    textAlign: 'center',
   },
   need: {
     ...display,

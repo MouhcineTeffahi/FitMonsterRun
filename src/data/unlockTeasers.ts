@@ -12,37 +12,43 @@ export type UnlockTeaser = {
   remaining: number;
 };
 
-/** Next locked reward to tease on Home / Game Over (skin first, then space). */
+function teaser(
+  kind: 'skin' | 'space',
+  id: string,
+  name: string,
+  cost: number,
+  totalCoins: number,
+): UnlockTeaser {
+  const remaining = Math.max(0, cost - totalCoins);
+  return {
+    kind,
+    id,
+    name,
+    cost,
+    owned: false,
+    progress: Math.min(1, totalCoins / Math.max(1, cost)),
+    remaining,
+  };
+}
+
+/** Next cheapest locked skin or space — always tease progress on Home / Game Over. */
 export function nextUnlockTeaser(
   totalCoins: number,
   unlockedSkins: SkinId[],
   unlockedSpaces: SpaceId[],
 ): UnlockTeaser | null {
-  const skin = SKINS.find((s) => s.price > 0 && !unlockedSkins.includes(s.id));
-  if (skin) {
-    const remaining = Math.max(0, skin.price - totalCoins);
-    return {
-      kind: 'skin',
-      id: skin.id,
-      name: skin.name,
-      cost: skin.price,
-      owned: false,
-      progress: Math.min(1, totalCoins / skin.price),
-      remaining,
-    };
+  const candidates: UnlockTeaser[] = [];
+  for (const skin of SKINS) {
+    if (skin.price > 0 && !unlockedSkins.includes(skin.id)) {
+      candidates.push(teaser('skin', skin.id, skin.name, skin.price, totalCoins));
+    }
   }
-  const space = SPACES.find((s) => s.cost > 0 && !unlockedSpaces.includes(s.id));
-  if (space) {
-    const remaining = Math.max(0, space.cost - totalCoins);
-    return {
-      kind: 'space',
-      id: space.id,
-      name: space.name,
-      cost: space.cost,
-      owned: false,
-      progress: Math.min(1, totalCoins / Math.max(1, space.cost)),
-      remaining,
-    };
+  for (const space of SPACES) {
+    if (space.cost > 0 && !unlockedSpaces.includes(space.id)) {
+      candidates.push(teaser('space', space.id, space.name, space.cost, totalCoins));
+    }
   }
-  return null;
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.cost - b.cost || a.remaining - b.remaining);
+  return candidates[0];
 }

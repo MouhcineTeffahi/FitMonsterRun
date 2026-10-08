@@ -101,4 +101,40 @@ wav('burp', render(0.45, (t) => {
   const voice = sq(TAU * f * t) * (0.6 + 0.4 * Math.sin(TAU * 31 * t));
   return (voice * 0.7 + bp * 0.5) * Math.sin(Math.PI * Math.min(1, t / 0.45)) ** 0.6;
 }), 0.55);
+
+/** Short seamless-ish loops for menu / run (optional polish; keep tiny). */
+function loopPad(seconds, chords) {
+  return render(seconds, (t) => {
+    let v = 0;
+    for (const [freqs, start, dur, gain = 0.35] of chords) {
+      const lt = t - start;
+      if (lt < 0 || lt > dur) continue;
+      const env = Math.min(1, lt / 0.08) * Math.min(1, (dur - lt) / 0.12);
+      for (const f of freqs) {
+        v += Math.sin(TAU * f * t) * env * gain;
+        v += Math.sin(TAU * f * 2 * t) * env * gain * 0.18;
+      }
+    }
+    // Soft clickless edges for looping.
+    const edge = Math.min(1, t / 0.02, (seconds - t) / 0.02);
+    return v * edge;
+  });
+}
+
+wav(
+  'menu-loop',
+  loopPad(4.0, [
+    [[196, 247, 294], 0.0, 2.0, 0.28],
+    [[220, 262, 330], 1.9, 2.1, 0.26],
+  ]),
+  0.4,
+);
+wav(
+  'run-loop',
+  loopPad(3.2, [
+    [[165, 220, 277], 0.0, 1.6, 0.3],
+    [[185, 233, 311], 1.5, 1.7, 0.28],
+  ]),
+  0.38,
+);
 console.log('wrote sounds to', out);

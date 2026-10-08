@@ -14,7 +14,7 @@ import {
 } from '../data/playerColors';
 import { MAX_ENERGY } from '../data/theme';
 import { DAILY_CHALLENGES, todayKey, type ChallengeStat } from '../data/challenges';
-import { DEFAULT_SPACE, SPACES, getSpace, isSpaceId, type SpaceId } from '../data/spaces';
+import { DEFAULT_SPACE, FREE_SPACES, getSpace, isSpaceId, type SpaceId } from '../data/spaces';
 import {
   DEFAULT_ACCESSORY,
   DEFAULT_UNLOCKED_ACCESSORIES,
@@ -43,10 +43,9 @@ import {
 } from '../data/retention';
 
 const STORAGE_KEY = '@fit_monster_run/progress_v1';
-const SAVE_VERSION = 2;
-/** Tester bankroll so every place can be opened. */
-const TEST_COINS = 99_999;
-const ALL_SPACES: SpaceId[] = SPACES.map((s) => s.id);
+const SAVE_VERSION = 3;
+/** Fresh installs start with a small bankroll so daily rewards / teasers matter. */
+const STARTER_COINS = 80;
 
 type PersistedSlice = {
   v: number;
@@ -185,9 +184,12 @@ function parseDaily(raw: unknown): DailyState {
 }
 
 function parseSpaces(parsed: Partial<PersistedSlice>): Pick<PersistedSlice, 'selectedSpace' | 'unlockedSpaces'> {
-  const stored = Array.isArray(parsed.unlockedSpaces) ? parsed.unlockedSpaces.filter(isSpaceId) : [];
-  const unlockedSpaces = [...new Set([...ALL_SPACES, ...stored])];
-  const selectedSpace = isSpaceId(parsed.selectedSpace) && unlockedSpaces.includes(parsed.selectedSpace) ? parsed.selectedSpace : DEFAULT_SPACE;
+  const stored = Array.isArray(parsed.unlockedSpaces) ? parsed.unlockedSpaces.filter(isSpaceId) : [...FREE_SPACES];
+  const unlockedSpaces = [...new Set([...FREE_SPACES, ...stored])];
+  const selectedSpace =
+    isSpaceId(parsed.selectedSpace) && unlockedSpaces.includes(parsed.selectedSpace)
+      ? parsed.selectedSpace
+      : DEFAULT_SPACE;
   return { selectedSpace, unlockedSpaces };
 }
 
@@ -216,7 +218,10 @@ function migrate(raw: unknown): PersistedSlice {
     : [];
   return {
     v: SAVE_VERSION,
-    totalCoins: Math.max(TEST_COINS, Math.floor(Number(parsed.totalCoins) || 0)),
+    totalCoins: (() => {
+      const raw = Number(parsed.totalCoins);
+      return Math.max(0, Math.floor(Number.isFinite(raw) ? raw : STARTER_COINS));
+    })(),
     selectedSkin: unlocked.includes(selected) ? selected : DEFAULT_SKIN,
     unlockedSkins: unlocked.includes(DEFAULT_SKIN) ? unlocked : [DEFAULT_SKIN, ...unlocked],
     bestScore: Math.max(0, Math.floor(Number(parsed.bestScore) || 0)),

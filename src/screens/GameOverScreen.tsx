@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { REWARD_COINS } from '../ads/config';
+import { showRewardedAd } from '../ads/rewarded';
 import { colors, radii, spacing } from '../data/theme';
 import type { RunSummary } from '../data/types';
 import { nextUnlockTeaser } from '../data/unlockTeasers';
@@ -23,7 +25,10 @@ export function GameOverScreen({ summary, onRestart, onHome }: Props) {
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
   const unlockedSpaces = useProgressStore((s) => s.unlockedSpaces);
+  const addCoins = useProgressStore((s) => s.addCoins);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [adBusy, setAdBusy] = useState(false);
+  const [coinsClaimed, setCoinsClaimed] = useState(false);
   const teaser = useMemo(
     () => nextUnlockTeaser(totalCoins, unlockedSkins, unlockedSpaces),
     [totalCoins, unlockedSkins, unlockedSpaces],
@@ -33,6 +38,21 @@ export function GameOverScreen({ summary, onRestart, onHome }: Props) {
     playSfx('coin');
     const result = await shareRun(runShareText(lastScore, summary.distance, summary.bestCombo));
     setShareNote(result === 'copied' ? 'Copié !' : result === 'shared' ? 'Partagé !' : 'Partage indisponible');
+  };
+
+  const onWatchCoins = async () => {
+    if (adBusy || coinsClaimed) return;
+    setAdBusy(true);
+    try {
+      const result = await showRewardedAd('coins');
+      if (result === 'rewarded') {
+        addCoins(REWARD_COINS);
+        setCoinsClaimed(true);
+        playSfx('level');
+      }
+    } finally {
+      setAdBusy(false);
+    }
   };
 
   return (
@@ -60,6 +80,21 @@ export function GameOverScreen({ summary, onRestart, onHome }: Props) {
         </View>
 
         {teaser ? <UnlockTeaserCard teaser={teaser} /> : null}
+
+        <Pressable
+          style={[styles.rewardBtn, (adBusy || coinsClaimed) && styles.rewardDisabled]}
+          onPress={() => void onWatchCoins()}
+          disabled={adBusy || coinsClaimed}
+          accessibilityRole="button"
+        >
+          {adBusy ? (
+            <ActivityIndicator color={colors.black} />
+          ) : (
+            <Text style={styles.rewardText}>
+              {coinsClaimed ? `+${REWARD_COINS} RÉCUPÉRÉS` : `▶ +${REWARD_COINS} HALTÈRES (PUB)`}
+            </Text>
+          )}
+        </Pressable>
 
         <Pressable style={ui.primaryBtn} onPress={onRestart}>
           <Text style={ui.primaryBtnText}>REJOUER</Text>
@@ -137,6 +172,23 @@ const styles = StyleSheet.create({
     color: colors.green,
     fontSize: 14,
     textAlign: 'center',
+  },
+  rewardBtn: {
+    backgroundColor: '#7CFF6B',
+    borderBottomWidth: 4,
+    borderBottomColor: '#2E7D32',
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+  },
+  rewardDisabled: {
+    opacity: 0.55,
+  },
+  rewardText: {
+    ...display,
+    color: colors.black,
+    fontSize: 18,
   },
   title: {
     ...display,

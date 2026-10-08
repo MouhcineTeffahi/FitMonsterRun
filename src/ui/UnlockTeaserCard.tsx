@@ -36,7 +36,7 @@ export function UnlockTeaserCard({ teaser, compact }: Props) {
           ? teaser.kind === 'space'
             ? 'Appuie sur le lieu pour débloquer'
             : 'Tu peux l’acheter en boutique'
-          : `Encore ${teaser.remaining} haltères`}
+          : `Need ${teaser.remaining} more coins · Encore ${teaser.remaining}`}
       </Text>
     </View>
   );

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import type { RunSummary, ScreenId } from './src/data/types';
 import { colors } from './src/data/theme';
+import { setMusicEnabled } from './src/game/audio/music';
 import { preloadSfx, setSfxEnabled } from './src/game/audio/sfx';
 import { ChallengesScreen } from './src/screens/ChallengesScreen';
 import { CustomizeScreen } from './src/screens/CustomizeScreen';
@@ -15,6 +16,7 @@ import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { ShopScreen } from './src/screens/ShopScreen';
 import { useProgressStore } from './src/store/progressStore';
 import { useAppFonts } from './src/ui/fonts';
+import { RewardedAdOverlayHost } from './src/ui/RewardedAdOverlay';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>('home');
@@ -39,6 +41,7 @@ export default function App() {
 
   useEffect(() => {
     setSfxEnabled(soundEnabled);
+    setMusicEnabled(soundEnabled);
   }, [soundEnabled]);
 
   if (!hydrated || !fontsReady) {
@@ -92,6 +95,7 @@ export default function App() {
       ) : null}
       {screen === 'challenges' ? <ChallengesScreen onBack={home} /> : null}
       {screen === 'leaderboard' ? <LeaderboardScreen onBack={home} /> : null}
+      <RewardedAdOverlayHost />
     </GestureHandlerRootView>
   );
 }

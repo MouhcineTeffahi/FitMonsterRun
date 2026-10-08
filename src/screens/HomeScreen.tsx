@@ -13,6 +13,8 @@ import { paintedSkin } from '../data/playerColors';
 import { withAccessory } from '../data/shop';
 import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
+import { nextUnlockTeaser } from '../data/unlockTeasers';
+import { playMusic } from '../game/audio/music';
 import { playSfx } from '../game/audio/sfx';
 import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
@@ -23,6 +25,8 @@ import { LoginStreak } from '../ui/LoginStreak';
 import { Logo } from '../ui/Logo';
 import { MenuBackdrop } from '../ui/MenuBackdrop';
 import { SpacePicker } from '../ui/SpacePicker';
+import { TutorialOverlay } from '../ui/TutorialOverlay';
+import { UnlockTeaserCard } from '../ui/UnlockTeaserCard';
 import { ui } from '../utils/styles';
 
 type Props = {
@@ -46,10 +50,19 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
   const pendingChest = useProgressStore((s) => s.pendingChest);
   const openChest = useProgressStore((s) => s.openChest);
   const selectedAccessory = useProgressStore((s) => s.selectedAccessory);
+  const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
+  const unlockedSpaces = useProgressStore((s) => s.unlockedSpaces);
+  const tutorialDone = useProgressStore((s) => s.tutorialDone);
+  const completeTutorial = useProgressStore((s) => s.completeTutorial);
   const [chestReward, setChestReward] = useState(0);
+  const [showTutorial, setShowTutorial] = useState(!tutorialDone);
   const skin = useMemo(
     () => withAccessory(paintedSkin(getSkin(selectedSkin), playerColors), selectedAccessory),
     [selectedSkin, playerColors, selectedAccessory],
+  );
+  const teaser = useMemo(
+    () => nextUnlockTeaser(totalCoins, unlockedSkins, unlockedSpaces),
+    [totalCoins, unlockedSkins, unlockedSpaces],
   );
 
   const today = daily.date === todayKey() ? daily : null;
@@ -62,6 +75,10 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
   useEffect(() => {
     if (pendingChest) setChestReward(openChest());
   }, [pendingChest, openChest]);
+
+  useEffect(() => {
+    if (soundEnabled) playMusic('menu');
+  }, [soundEnabled]);
 
   const pulse = useSharedValue(1);
   const playPulse = useSharedValue(1);
@@ -127,6 +144,7 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
                 if (n > 0) playSfx('level');
               }}
             />
+            {teaser ? <UnlockTeaserCard teaser={teaser} compact /> : null}
             <SpacePicker />
           </View>
 
@@ -147,6 +165,15 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
         </View>
       </SafeAreaView>
       {chestReward > 0 ? <ChestModal reward={chestReward} onClose={() => setChestReward(0)} /> : null}
+      {showTutorial ? (
+        <TutorialOverlay
+          onDone={() => {
+            setShowTutorial(false);
+            completeTutorial();
+          }}
+          onPlay={onPlay}
+        />
+      ) : null}
     </View>
   );
 }

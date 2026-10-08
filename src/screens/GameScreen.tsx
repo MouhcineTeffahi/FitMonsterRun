@@ -16,7 +16,10 @@ import { getSkin } from '../data/skins';
 import { getSpace } from '../data/spaces';
 import { colors, MAX_ENERGY } from '../data/theme';
 import type { RunSummary } from '../data/types';
+import { MAX_AD_CONTINUES } from '../ads/config';
+import { showRewardedAd } from '../ads/rewarded';
 import { haptic } from '../game/audio/haptics';
+import { playMusic } from '../game/audio/music';
 import {
   RunnerScene,
   type PickupEvent,
@@ -32,7 +35,6 @@ import { HUD, type MissionView } from '../ui/HUD';
 import { LevelComplete } from '../ui/LevelComplete';
 import { ReviveOverlay } from '../ui/ReviveOverlay';
 import { SpeedLines } from '../ui/SpeedLines';
-import { TutorialOverlay } from '../ui/TutorialOverlay';
 import { Vignette } from '../ui/Vignette';
 
 type Props = {
@@ -128,8 +130,7 @@ export function GameScreen({ onGameOver }: Props) {
   const ghost = useProgressStore((s) => s.ghost);
   const totalCoins = useProgressStore((s) => s.totalCoins);
   const spendCoins = useProgressStore((s) => s.spendCoins);
-  const tutorialDone = useProgressStore((s) => s.tutorialDone);
-  const completeTutorial = useProgressStore((s) => s.completeTutorial);
+  const soundEnabled = useProgressStore((s) => s.soundEnabled);
   const skin = useMemo(
     () => withAccessory(paintedSkin(getSkin(selectedSkin), playerColors), selectedAccessory),
     [selectedSkin, playerColors, selectedAccessory],
@@ -148,8 +149,9 @@ export function GameScreen({ onGameOver }: Props) {
   const [intro, setIntro] = useState<IntroStep>(null);
   const [levelDone, setLevelDone] = useState<{ level: number; score: number } | null>(null);
   const [reviveOffer, setReviveOffer] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(!tutorialDone);
-  const usedRevive = useRef(false);
+  const [adContinuesLeft, setAdContinuesLeft] = useState(MAX_AD_CONTINUES);
+  const adContinuesLeftRef = useRef(MAX_AD_CONTINUES);
+  const coinReviveUsed = useRef(false);
   const [missionIdx, setMissionIdx] = useState(0);
   const missionBase = useRef(0);
   const missionIdxRef = useRef(0);
@@ -179,12 +181,13 @@ export function GameScreen({ onGameOver }: Props) {
 
   useEffect(() => {
     resetRun();
+    if (soundEnabled) playMusic('run');
     const hintTimer = setTimeout(() => setHint(false), HINT_TIME_MS);
     return () => {
       clearTimeout(hintTimer);
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
-  }, [resetRun]);
+  }, [resetRun, soundEnabled]);
 
   useEffect(() => {
     if (!ready || introStarted.current) return;
@@ -206,7 +209,7 @@ export function GameScreen({ onGameOver }: Props) {
     return () => clearTimeout(id);
   }, [intro]);
 
-  const counting = !ready || intro !== null || !introStarted.current || showTutorial;
+  const counting = !ready || intro !== null || !introStarted.current;
   userPaused.current = paused || reviveOffer;
   introOn.current = counting;
 
@@ -316,7 +319,9 @@ export function GameScreen({ onGameOver }: Props) {
         return;
       }
       if (event === 'death') {
-        if (!usedRevive.current) {
+        const canAd = adContinuesLeftRef.current > 0;
+        const canCoins = !coinReviveUsed.current;
+        if (canAd || canCoins) {
           setReviveOffer(true);
         } else {
           controls.current.reviveDeclined = true;
@@ -399,28 +404,32 @@ export function GameScreen({ onGameOver }: Props) {
     handleGameOver(statsRef.current);
   }, [handleGameOver]);
 
-  const onRevive = useCallback(() => {
-    if (usedRevive.current) return;
-    if (!spendCoins(REVIVE_COST)) {
-      controls.current.reviveDeclined = true;
-      setReviveOffer(false);
-      return;
-    }
-    usedRevive.current = true;
+  const applyRevive = useCallback(() => {
     controls.current.reviveQueued = true;
     setReviveOffer(false);
     haptic('success');
-  }, [spendCoins]);
+  }, []);
+
+  const onContinueAd = useCallback(async () => {
+    if (adContinuesLeftRef.current <= 0) return;
+    const result = await showRewardedAd('continue');
+    if (result !== 'rewarded') return;
+    adContinuesLeftRef.current -= 1;
+    setAdContinuesLeft(adContinuesLeftRef.current);
+    applyRevive();
+  }, [applyRevive]);
+
+  const onContinueCoins = useCallback(() => {
+    if (coinReviveUsed.current) return;
+    if (!spendCoins(REVIVE_COST)) return;
+    coinReviveUsed.current = true;
+    applyRevive();
+  }, [applyRevive, spendCoins]);
 
   const onGiveUp = useCallback(() => {
     controls.current.reviveDeclined = true;
     setReviveOffer(false);
   }, []);
-
-  const finishTutorial = useCallback(() => {
-    setShowTutorial(false);
-    completeTutorial();
-  }, [completeTutorial]);
 
   const flashStyle = useAnimatedStyle(() => ({
     opacity: flash.value,
@@ -506,10 +515,14 @@ export function GameScreen({ onGameOver }: Props) {
         </View>
       ) : null}
 
-      {showTutorial && intro === null ? <TutorialOverlay onDone={finishTutorial} /> : null}
-
       {reviveOffer ? (
-        <ReviveOverlay coins={totalCoins} onContinue={onRevive} onGiveUp={onGiveUp} />
+        <ReviveOverlay
+          coins={totalCoins}
+          adContinuesLeft={adContinuesLeft}
+          onContinueAd={onContinueAd}
+          onContinueCoins={onContinueCoins}
+          onGiveUp={onGiveUp}
+        />
       ) : null}
     </View>
   );
