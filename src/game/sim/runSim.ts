@@ -369,7 +369,6 @@ function hurt(s: RunState, damage: number, shake: number, emit: (e: RunEvent) =>
   s.invuln = HIT_INVULN_S;
   s.shake = shake;
   s.hitT = 0;
-  if (flavour === 'burp') s.slowT = Math.max(s.slowT, 1.5);
   emit('hit');
   emit(flavour);
 }

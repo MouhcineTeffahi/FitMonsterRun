@@ -1,0 +1,157 @@
+diff --git a/node_modules/@react-three/fiber/native/dist/react-three-fiber-native.cjs.prod.js b/node_modules/@react-three/fiber/native/dist/react-three-fiber-native.cjs.prod.js
+index 9d18598..7fcc581 100644
+--- a/node_modules/@react-three/fiber/native/dist/react-three-fiber-native.cjs.prod.js
++++ b/node_modules/@react-three/fiber/native/dist/react-three-fiber-native.cjs.prod.js
+@@ -448,49 +448,67 @@ function polyfills() {
+   if (reactNative.Platform.OS !== 'web') {
+     try {
+       const blob = new Blob([new ArrayBuffer(4)]);
+-      const url = URL.createObjectURL(blob);
+-      URL.revokeObjectURL(url);
++      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
++        const url = URL.createObjectURL(blob);
++        URL.revokeObjectURL(url);
++      } else {
++        throw new Error('URL.createObjectURL unavailable');
++      }
+     } catch (_) {
+-      var _BlobManagerModule$de;
+-      const BlobManagerModule = require('react-native/Libraries/Blob/BlobManager.js');
+-      const BlobManager = (_BlobManagerModule$de = BlobManagerModule.default) != null ? _BlobManagerModule$de : BlobManagerModule;
+-      const createObjectURL = URL.createObjectURL;
+-      URL.createObjectURL = function (blob) {
+-        if (blob.data._base64) {
+-          return `data:${blob.type};base64,${blob.data._base64}`;
++      try {
++        var _BlobManagerModule$de;
++        const BlobManagerModule = require('react-native/Libraries/Blob/BlobManager.js');
++        const BlobManager = (_BlobManagerModule$de = BlobManagerModule.default) != null ? _BlobManagerModule$de : BlobManagerModule;
++        if (typeof URL !== 'undefined') {
++          const createObjectURL = typeof URL.createObjectURL === 'function' ? URL.createObjectURL.bind(URL) : null;
++          URL.createObjectURL = function (blob) {
++            if (blob && blob.data && blob.data._base64) {
++              return `data:${blob.type};base64,${blob.data._base64}`;
++            }
++            if (createObjectURL) return createObjectURL(blob);
++            return `blob:${Math.random().toString(36).slice(2)}`;
++          };
+         }
+-        return createObjectURL(blob);
+-      };
+-      const createFromParts = BlobManager.createFromParts;
+-      BlobManager.createFromParts = function (parts, options) {
+-        parts = parts.map(part => {
+-          if (part instanceof ArrayBuffer || ArrayBuffer.isView(part)) {
+-            part = base64Js.fromByteArray(new Uint8Array(part));
+-          }
+-          return part;
+-        });
+-        const blob = createFromParts(parts, options);
+-
+-        // Always enable slow but safe path for iOS (previously for Android unauth)
+-        // https://github.com/pmndrs/react-three-fiber/issues/3075
+-        // if (!NativeModules.BlobModule?.BLOB_URI_SCHEME) {
+-        blob.data._base64 = '';
+-        for (const part of parts) {
+-          var _data$_base, _data;
+-          blob.data._base64 += (_data$_base = (_data = part.data) == null ? void 0 : _data._base64) != null ? _data$_base : part;
++        if (BlobManager && typeof BlobManager.createFromParts === 'function') {
++          const createFromParts = BlobManager.createFromParts.bind(BlobManager);
++          BlobManager.createFromParts = function (parts, options) {
++            parts = parts.map(part => {
++              if (part instanceof ArrayBuffer || ArrayBuffer.isView(part)) {
++                part = base64Js.fromByteArray(new Uint8Array(part));
++              }
++              return part;
++            });
++            const blob = createFromParts(parts, options);
++            blob.data._base64 = '';
++            for (const part of parts) {
++              var _data$_base, _data;
++              blob.data._base64 += (_data$_base = (_data = part.data) == null ? void 0 : _data._base64) != null ? _data$_base : part;
++            }
++            return blob;
++          };
+         }
+-        // }
+-
+-        return blob;
+-      };
++      } catch (patchError) {
++        console.warn('[r3f-native] Blob/URL polyfill skipped', patchError);
++      }
+     }
+   }
+ 
+   // Don't pre-process urls, let expo-asset generate an absolute URL
+-  const extractUrlBase = THREE__namespace.LoaderUtils.extractUrlBase.bind(THREE__namespace.LoaderUtils);
+-  THREE__namespace.LoaderUtils.extractUrlBase = url => typeof url === 'string' ? extractUrlBase(url) : './';
++  try {
++    const loaderUtils = THREE__namespace.LoaderUtils;
++    if (loaderUtils && typeof loaderUtils.extractUrlBase === 'function') {
++      const extractUrlBase = loaderUtils.extractUrlBase.bind(loaderUtils);
++      loaderUtils.extractUrlBase = url => typeof url === 'string' ? extractUrlBase(url) : './';
++    }
++  } catch (e) {
++    console.warn('[r3f-native] extractUrlBase patch skipped', e);
++  }
+ 
+   // There's no Image in native, so create a data texture instead
++  if (!THREE__namespace.TextureLoader || !THREE__namespace.TextureLoader.prototype) {
++    console.warn('[r3f-native] TextureLoader missing, skip texture polyfill');
++    return;
++  }
+   THREE__namespace.TextureLoader.prototype.load = function load(url, onLoad, onProgress, onError) {
+     if (this.path && typeof url === 'string') url = this.path + url;
+     const texture = new THREE__namespace.Texture();
+@@ -523,25 +541,34 @@ function polyfills() {
+   };
+ 
+   // Fetches assets via FS
+-  THREE__namespace.FileLoader.prototype.load = function load(url, onLoad, onProgress, onError) {
+-    if (this.path && typeof url === 'string') url = this.path + url;
+-    this.manager.itemStart(url);
+-    getAsset(url).then(async uri => {
+-      const base64 = await fs.readAsStringAsync(uri, {
+-        encoding: fs.EncodingType.Base64
++  if (THREE__namespace.FileLoader && THREE__namespace.FileLoader.prototype) {
++    THREE__namespace.FileLoader.prototype.load = function load(url, onLoad, onProgress, onError) {
++      if (this.path && typeof url === 'string') url = this.path + url;
++      this.manager.itemStart(url);
++      getAsset(url).then(async uri => {
++        const encoding = fs.EncodingType && fs.EncodingType.Base64 != null ? fs.EncodingType.Base64 : 'base64';
++        const base64 = await fs.readAsStringAsync(uri, {
++          encoding
++        });
++        const data = buffer.Buffer.from(base64, 'base64');
++        onLoad == null ? void 0 : onLoad(data.buffer);
++      }).catch(error => {
++        onError == null ? void 0 : onError(error);
++        this.manager.itemError(url);
++      }).finally(() => {
++        this.manager.itemEnd(url);
+       });
+-      const data = buffer.Buffer.from(base64, 'base64');
+-      onLoad == null ? void 0 : onLoad(data.buffer);
+-    }).catch(error => {
+-      onError == null ? void 0 : onError(error);
+-      this.manager.itemError(url);
+-    }).finally(() => {
+-      this.manager.itemEnd(url);
+-    });
+-  };
++    };
++  }
+ }
+ 
+-if (reactNative.Platform.OS !== 'web') polyfills();
++if (reactNative.Platform.OS !== 'web') {
++  try {
++    polyfills();
++  } catch (e) {
++    console.warn('[r3f-native] polyfills() failed', e);
++  }
++}
+ 
+ exports.ReactThreeFiber = events.threeTypes;
+ exports._roots = events._roots;

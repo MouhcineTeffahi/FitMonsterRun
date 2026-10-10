@@ -1,4 +1,4 @@
-import { useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber/native';
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 

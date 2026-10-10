@@ -26,7 +26,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": [],
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -56,6 +61,16 @@
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3d5c76c1-a6f3-4b6b-b303-5cd7d62b49f8"
+      }
+    },
+    "owner": "mouhcinete"
+  },
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-3940256099942544~3347511713",
+    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
   }
 }

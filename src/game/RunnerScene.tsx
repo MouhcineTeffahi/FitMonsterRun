@@ -1,4 +1,4 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import * as THREE from 'three';
@@ -71,10 +71,10 @@ const BURST_FOR: Partial<Record<RunEvent, BurstKind>> = {
   burp: 'burp',
   bonk: 'stars',
   nearMiss: 'nearMiss',
-  combo: 'power',
-  creatine: 'power',
-  prework: 'protein',
-  magnet: 'protein',
+  combo: 'bite',
+  creatine: 'bite',
+  prework: 'bite',
+  magnet: 'bite',
   gymZone: 'confetti',
 };
 
@@ -198,9 +198,9 @@ function Game({ skin, controls, onStats, onEvent, onBiome, onGameOver, onReady, 
       }
       if (event === 'hit') {
         s.shake = Math.max(s.shake, 0.55);
-        haptic('heavy');
       }
-      if (event === 'coin' || event === 'healthy' || event === 'magnet' || event === 'creatine' || event === 'prework') haptic('light');
+      if (event === 'bonk') haptic('heavy');
+      if (event === 'coin') haptic('light');
       if (event === 'combo' || event === 'power' || event === 'level') haptic('success');
       playEventSfx(event);
       onEvent(event);

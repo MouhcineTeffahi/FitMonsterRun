@@ -1,4 +1,4 @@
-import { useLoader } from '@react-three/fiber';
+import { useLoader } from '@react-three/fiber/native';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';

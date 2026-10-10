@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -16,7 +16,6 @@ import { colors, radii, spacing } from '../data/theme';
 import { nextUnlockTeaser } from '../data/unlockTeasers';
 import { playMusic } from '../game/audio/music';
 import { playSfx } from '../game/audio/sfx';
-import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
 import { ChestModal } from '../ui/ChestModal';
 import { DumbbellMark } from '../ui/DumbbellMark';
@@ -24,6 +23,7 @@ import { display } from '../ui/fonts';
 import { LoginStreak } from '../ui/LoginStreak';
 import { Logo } from '../ui/Logo';
 import { MenuBackdrop } from '../ui/MenuBackdrop';
+import { MonsterPreview } from '../ui/MonsterPreview';
 import { SpacePicker } from '../ui/SpacePicker';
 import { TutorialOverlay } from '../ui/TutorialOverlay';
 import { UnlockTeaserCard } from '../ui/UnlockTeaserCard';
@@ -109,7 +109,9 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
         style={[styles.heroGlow, glowStyle, { backgroundColor: playerColors.body }]}
         pointerEvents="none"
       />
-      <MonsterShowcase skin={skin} mode="hero" floor={false} style={styles.hero} />
+      <View style={styles.hero} pointerEvents="none">
+        <MonsterPreview skin={skin} size={220} />
+      </View>
       <SafeAreaView style={styles.safe}>
         <View style={styles.topBar}>
           <View style={styles.pill}>
@@ -126,14 +128,17 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
           </Pressable>
         </View>
 
-        <View style={styles.brand}>
-          <Logo width={270} />
-          <Text style={styles.tagline}>
-            COURS. MANGE CLEAN.{'\n'}DEVIENS LA MEILLEURE{'\n'}VERSION DE TOI !
-          </Text>
-        </View>
-
-        <View style={styles.flex} />
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.menuScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.brand}>
+            <Logo width={270} />
+            <Text style={styles.tagline}>
+              COURS. MANGE CLEAN.{'\n'}DEVIENS LA MEILLEURE{'\n'}VERSION DE TOI !
+            </Text>
+          </View>
 
           <View style={styles.menu}>
             <Text style={styles.best}>MEILLEUR SCORE : {bestScore}</Text>
@@ -147,6 +152,7 @@ export function HomeScreen({ onPlay, onShop, onCustomize, onChallenges, onLeader
             {teaser ? <UnlockTeaserCard teaser={teaser} compact /> : null}
             <SpacePicker />
           </View>
+        </ScrollView>
 
         <View style={styles.actions}>
           <Animated.View style={[playStyle, styles.playWrap]}>
@@ -198,6 +204,11 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  menuScroll: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+    paddingBottom: spacing.sm,
+  },
   heroGlow: {
     position: 'absolute',
     right: '-8%',
@@ -208,10 +219,10 @@ const styles = StyleSheet.create({
   },
   hero: {
     position: 'absolute',
-    right: '-18%',
-    top: '2%',
-    width: '78%',
-    height: '46%',
+    right: '-6%',
+    top: 72,
+    width: '70%',
+    height: '42%',
     pointerEvents: 'none',
   },
   topBar: {
@@ -278,7 +289,7 @@ const styles = StyleSheet.create({
   actions: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
+    paddingBottom: Platform.OS === 'ios' ? 8 : spacing.lg,
     gap: spacing.sm,
     alignSelf: 'center',
     width: '100%',

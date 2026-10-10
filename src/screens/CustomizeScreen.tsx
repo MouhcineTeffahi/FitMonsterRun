@@ -10,9 +10,9 @@ import {
 } from '../data/playerColors';
 import { getSkin } from '../data/skins';
 import { colors, radii, spacing } from '../data/theme';
-import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
 import { display } from '../ui/fonts';
+import { MonsterPreview } from '../ui/MonsterPreview';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { ui } from '../utils/styles';
 
@@ -46,7 +46,9 @@ export function CustomizeScreen({ onBack }: Props) {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.stage}>
           <View style={[styles.stageGlow, { backgroundColor: `${playerColors.body}33` }]} />
-          <MonsterShowcase skin={preview} style={styles.showcase} />
+          <View style={styles.showcase}>
+            <MonsterPreview skin={preview} size={180} />
+          </View>
           <Text style={styles.stageHint}>APPUIE SUR UNE TEINTE · APERÇU LIVE</Text>
         </View>
 

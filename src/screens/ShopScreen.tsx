@@ -11,7 +11,6 @@ import {
 import { getSkin, SKINS, type SkinId } from '../data/skins';
 import { playSfx } from '../game/audio/sfx';
 import { colors, radii, spacing } from '../data/theme';
-import { MonsterShowcase } from '../game/player/MonsterShowcase';
 import { useProgressStore } from '../store/progressStore';
 import { DumbbellMark } from '../ui/DumbbellMark';
 import { display } from '../ui/fonts';
@@ -88,7 +87,9 @@ export function ShopScreen({ onBack, onCustomize }: Props) {
         <>
         <View style={styles.stage}>
           <View style={[styles.stageGlow, { backgroundColor: `${playerColors.body}22` }]} />
-          <MonsterShowcase skin={preview} style={styles.showcase} />
+          <View style={styles.showcase}>
+            <MonsterPreview skin={preview} size={180} />
+          </View>
           <Text style={styles.stageName}>{preview.name.toUpperCase()}</Text>
         </View>
 

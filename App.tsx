@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 
@@ -10,13 +10,17 @@ import { preloadSfx, setSfxEnabled } from './src/game/audio/sfx';
 import { ChallengesScreen } from './src/screens/ChallengesScreen';
 import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { GameOverScreen } from './src/screens/GameOverScreen';
-import { GameScreen } from './src/screens/GameScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { ShopScreen } from './src/screens/ShopScreen';
 import { useProgressStore } from './src/store/progressStore';
 import { useAppFonts } from './src/ui/fonts';
 import { RewardedAdOverlayHost } from './src/ui/RewardedAdOverlay';
+
+// Lazy: GameScreen pulls @react-three/fiber — keep it out of the initial require graph.
+type GameScreenComponent = React.ComponentType<{
+  onGameOver: (summary: RunSummary) => void;
+}>;
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>('home');
@@ -28,6 +32,8 @@ export default function App() {
     bestCombo: 0,
     record: false,
   });
+  const [GameScreen, setGameScreen] = useState<GameScreenComponent | null>(null);
+  const [gameLoadError, setGameLoadError] = useState<string | null>(null);
   const hydrated = useProgressStore((s) => s.hydrated);
   const loadProgress = useProgressStore((s) => s.loadProgress);
   const resetRun = useProgressStore((s) => s.resetRun);
@@ -56,7 +62,23 @@ export default function App() {
   const startRun = () => {
     resetRun();
     setSummary({ coins: 0, distance: 0, level: 1, bestCombo: 0, record: false });
-    setScreen('game');
+    setGameLoadError(null);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('./src/screens/GameScreen') as {
+        GameScreen?: GameScreenComponent;
+        default?: GameScreenComponent;
+      };
+      const Loaded = mod?.GameScreen ?? mod?.default;
+      if (typeof Loaded !== 'function') {
+        throw new Error('GameScreen did not load');
+      }
+      setGameScreen(() => Loaded);
+      setScreen('game');
+    } catch (e) {
+      setGameLoadError(e instanceof Error ? e.message : String(e));
+      setScreen('home');
+    }
   };
   const home = () => setScreen('home');
   const openCustomize = (from: 'home' | 'shop') => {
@@ -76,7 +98,7 @@ export default function App() {
           onLeaderboard={() => setScreen('leaderboard')}
         />
       ) : null}
-      {screen === 'game' ? (
+      {screen === 'game' && GameScreen ? (
         <GameScreen
           onGameOver={(next) => {
             setSummary(next);
@@ -95,6 +117,11 @@ export default function App() {
       ) : null}
       {screen === 'challenges' ? <ChallengesScreen onBack={home} /> : null}
       {screen === 'leaderboard' ? <LeaderboardScreen onBack={home} /> : null}
+      {gameLoadError ? (
+        <View style={styles.errorBanner} pointerEvents="none">
+          <Text style={styles.errorText}>{gameLoadError}</Text>
+        </View>
+      ) : null}
       <RewardedAdOverlayHost />
     </GestureHandlerRootView>
   );
@@ -110,5 +137,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 24,
+    backgroundColor: '#1a1020',
+    borderRadius: 12,
+    padding: 12,
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 13,
   },
 });

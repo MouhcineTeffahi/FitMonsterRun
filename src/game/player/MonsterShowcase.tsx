@@ -1,4 +1,4 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import React, { Suspense, useEffect } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import * as THREE from 'three';
